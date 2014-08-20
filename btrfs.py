@@ -1,23 +1,15 @@
 import subprocess
 import os
 
-def get_btrfs_snapshot_path():
-    '''gets the path to the btrfs-snapshot script'''
-    module_path= os.path.dirname(os.path.abspath(__file__)) #path to this module
-    p= os.join( module_path, "btrfs-snapshot")
-    assert os.path.exists(p)
-    return p 
-    
-
-def btrfs_snapshot(fro, to):
+def snapshot(fro, to):
     command= "/sbin/btrfs sub snap {0} {1}".format(fro, to)
     subprocess.check_call(command, shell=True)
 
-def btrfs_create_subvolume(path):
+def create_subvolume(path):
     command= "/sbin/btrfs sub create {0}".format(path)
     subprocess.check_call(command, shell=True)
 
-def btrfs_get_subvolumes(path):
+def get_subvolumes(path):
     command= "/sbin/btrfs sub list {0}".format(path)
     out= subprocess.check_output(command, shell=True)
     def line_to_subvol(line):
@@ -29,17 +21,17 @@ def btrfs_get_subvolumes(path):
         return {"id":id, "path":path}
     return map( line_to_subvol, out.splitlines() ) 
 
-def btrfs_get_subvolume_id( fs_path, subvol_path ):
+def get_subvolume_id( fs_path, subvol_path ):
     subs= btrfs_get_subvolumes( fs_path )
     subs= filter( lambda sub: subvol_path in sub['path'], subs )
     assert len(subs)==1
     return subs[0]["id"]
 
-def btrfs_set_default_subvol( fs_path, subvol_id ):
+def set_default_subvol( fs_path, subvol_id ):
     command= "/sbin/btrfs sub set {subvol_id} {fs_path}".format(**locals())
     subprocess.check_call(command, shell=True)    
 
-def create_btrfs_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_subvol=True):
+def create_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_subvol=True):
     '''Creates default subvolumes, and snapshots directory structure, migrating any existing data'''
     subvol_path= {"":"root", "home":"home"} #path of a subvolume inside the root subvolume
     SNAPSHOT_PATH= "snapshots"			#snapshot directory, inside the root subvolume    
@@ -53,7 +45,7 @@ def create_btrfs_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_defa
     assert is_mountpoint(mountpoint)
     assert len(subvolumes) and set( subvolumes )<set(subvol_path.keys())
 
-    btrfs_snapshot(mountpoint, j(mountpoint, subvol_path[""]))
+    snapshot(mountpoint, j(mountpoint, subvol_path[""]))
     print "creating snapshots dirs"
     os.mkdir( j(mountpoint, SNAPSHOT_PATH))
     for subvol in subvolumes:
@@ -61,7 +53,17 @@ def create_btrfs_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_defa
 
     if ("" in subvolumes) and set_default_subvol:
         print "setting default subvolume"
-        btrfs_set_default_subvol( mountpoint, btrfs_get_subvolume_id( mountpoint, subvol_path[""] ) )
+        set_default_subvol( mountpoint, get_subvolume_id( mountpoint, subvol_path[""] ) )
+
+#--------------- This section pertains to the btrfs-snapshot script-------------------------------
+
+def get_btrfs_snapshot_path():
+    '''gets the path to the btrfs-snapshot script'''
+    module_path= os.path.dirname(os.path.abspath(__file__)) #path to this module
+    p= os.join( module_path, "btrfs-snapshot")
+    assert os.path.exists(p)
+    return p 
+    
 
 def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/media/btrfs/root/snapshots/root", daily=7*3, weekly=4*3, monthly=12*3, yearly=10):
     '''installs btrfs-snapshot-rotation script
@@ -88,6 +90,8 @@ def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/med
         ).format(**locals())
     subprocess.check_call("cp btrfs-snapshot "+SCRIPT_PATH, shell=True)
     open(os.path.join(mountpoint, "etc","anacrontab"), "a").write( anacron_string )
+
+#------------------------------------------------------------------------------------------------
 
 if __name__=="__main__":
     python_cli(globals().values())
