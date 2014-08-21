@@ -42,7 +42,7 @@ class UnencryptedFile(object):
     def __enter__(self):
         ie= isEncrypted(self.file)
         if not allow_nullop and not ie:
-            raise Exception(File is not encrypted
+            raise Exception("File is not encrypted")
         if ie:
             self.decrypted_file= open_encrypted_disk( self.file )
             self.decrypted=True
