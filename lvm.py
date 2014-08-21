@@ -10,3 +10,7 @@ def createLV(vg, name, size="1GB"):
     command="/sbin/lvcreate {vg} --name {name} --size {size}".format(**locals())
     subprocess.check_call(command, shell=True)
 
+def removeLV(vg, name, force=True):
+    force_flag= "-f" if force else ""
+    command="/sbin/lvremove {force_flag} {vg}/{name}".format(**locals())
+    subprocess.check_call(command, shell=True)
