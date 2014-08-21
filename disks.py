@@ -84,16 +84,19 @@ def isOpened(x):
     return os.path.exists( unencrypted_path(x) )
 
 def mount(device, mountpoint, options=""):
+    print "mounting {device} on {mountpoint}".format(**locals())
     options= "-o "+options if options else ""
     command='mount {0} {1} {2}'.format(options, device,mountpoint)
     p=subprocess.check_call(command, shell=True)
 
 def unmount(device):
+    print "unmounting {device}".format(**locals())
     command='umount {0}'.format(device)
     p=subprocess.check_call(command, shell=True)
 
 def open_encrypted_disk( path ):
     '''unencrypt if needed. return path to unencrypted disk device'''
+    print "opening encrypted disk {path}".format(**locals())
     u_path= unencrypted_path( path )
     u_name= os.path.basename(u_path)
     if not os.path.exists(u_path): #already opened
@@ -105,10 +108,12 @@ def open_encrypted_disk( path ):
     return u_path
 
 def close_encrypted_disk( path ):
+    print "closing encrypted disk {path}".format(**locals())
     command= '/sbin/cryptsetup luksClose {0}'.format( path )
     subprocess.check_call( command )
 
 def createEncrypted( device_path ):
+    print "formatting new encrypted disk on {device_path}".format(**locals())
     assert os.path.exists(device_path) 
     command= "cryptsetup luksFormat "+device_path
     subprocess.check_call( command, shell=True )
@@ -125,6 +130,7 @@ def is_mountpoint( path ):
     return os.path.ismount(path)
 
 def create_filesystem(path, fs="btrfs", options=[]):
+    print "creating {fs} filesystem on {path}".format(**locals())
     if fs=="btrfs":
         options.append("-f")
     options= " ".join(options) 

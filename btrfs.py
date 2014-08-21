@@ -2,10 +2,12 @@ import subprocess
 import os
 
 def snapshot(fro, to):
+    print "Creating snapshot of {fro} in {to}".format(**locals())
     command= "/sbin/btrfs sub snap {0} {1}".format(fro, to)
     subprocess.check_call(command, shell=True)
 
 def create_subvolume(path):
+    print "Creating subvolume: {path}".format(**locals())
     command= "/sbin/btrfs sub create {0}".format(path)
     subprocess.check_call(command, shell=True)
 
@@ -28,6 +30,7 @@ def get_subvolume_id( fs_path, subvol_path ):
     return subs[0]["id"]
 
 def set_default_subvol( fs_path, subvol_id ):
+    print "Setting default subvolume of {fs_path} to {subvol_id}".format(**locals())
     command= "/sbin/btrfs sub set {subvol_id} {fs_path}".format(**locals())
     subprocess.check_call(command, shell=True)    
 
@@ -36,6 +39,7 @@ def create_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_su
     subvol_path= {"":"root", "home":"home"} #path of a subvolume inside the root subvolume
     SNAPSHOT_PATH= "snapshots"			#snapshot directory, inside the root subvolume    
     TMP_SUBVOL_PREFIX="-subvol"
+    print "creating btrfs base structure on {rootsubvol_mountpoint}".format(**locals())
     def snapshot_path( subvolume ):
         return j(SNAPSHOT_PATH, subvol_path[subvolume])
     j= os.path.join
@@ -72,6 +76,7 @@ def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/med
         snap_path: path we want snapshots stored on, relative to mountpoint
         '''
     SCRIPT_PATH="{mountpoint}/usr/local/bin".format(**locals())
+    print "installing btrfs-snapshot on {mountpoint}".format(**locals())
     source_script_path= get_btrfs_snapshot_path()
     assert any(map(os.path.exists, ("/sbin/anacron", "/usr/sbin/anacron"))) #check anacron is installed
     assert not os.path.exists(SCRIPT_PATH)	#check btrfs-snapshot not installed

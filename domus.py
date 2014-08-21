@@ -17,6 +17,7 @@ def allDomus():
     return domus
 
 def startDomu(domu):
+    print "starting domu {domu}".format(**locals())
     command='{0} create {1}/{2}.cfg'.format(XM,CFG_DIR,domu)
     p=subprocess.Popen(command, shell=True)
     p.wait()
@@ -37,6 +38,7 @@ def getOpenedDomuDisks(domu_vg, domu):
 def mountDomuDisks( domu_vg, domu, mountpoint ):
     '''mounts all domU disks (a root filesystem, possibly home, var, etc...)
     under a mountpoint'''
+    print "mounting domu disks for domu {domu}".format(**locals())
     if domu in runningDomus():
         raise Exception("domU is currently running. Refusing to mount disks to avoid data loss")
     d_disks= getOpenedDomuDisks(domu_vg, domu)
@@ -52,6 +54,7 @@ def mountDomuDisks( domu_vg, domu, mountpoint ):
 def umountDomuDisks( domu_vg, domu, mountpoint ):
     '''unmounts all domU disks (a root filesystem, possibly home, var, etc...)
     under a mountpoint'''
+    print "unmounting domu disks for domu {domu}".format(**locals())
     d_disks= getOpenedDomuDisks(domu_vg, domu)
     disk_mounts= [(d, getDomuDiskMountpoint(d)) for d in d_disks]
     disk_mounts= sorted(disk_mounts, key=lambda x: -len(x[1]))

@@ -54,7 +54,7 @@ class AtomicOperationSequence( FakeContainer ):
                 f()
             except Exception as e:
                 import sys
-                raise Exception("AtomicOperationSequence failed in rollback"), None, sys.exc_info()[2]
+                raise Exception("AtomicOperationSequence: FAILED ON ROLLBACK"), None, sys.exc_info()[2]
 
 
 def test():
