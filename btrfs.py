@@ -2,7 +2,8 @@ import subprocess
 import os
 
 def snapshot(fro, to):
-    print "Creating snapshot of {fro} in {to}".format(**locals())
+    #command already prints #print "Creating snapshot of {fro} in {to}".format(**locals())
+    assert not os.path.exists(to)
     command= "/sbin/btrfs sub snap {0} {1}".format(fro, to)
     subprocess.check_call(command, shell=True)
 
@@ -24,7 +25,7 @@ def get_subvolumes(path):
     return map( line_to_subvol, out.splitlines() ) 
 
 def get_subvolume_id( fs_path, subvol_path ):
-    subs= btrfs_get_subvolumes( fs_path )
+    subs= get_subvolumes( fs_path )
     subs= filter( lambda sub: subvol_path in sub['path'], subs )
     assert len(subs)==1
     return subs[0]["id"]
@@ -34,37 +35,47 @@ def set_default_subvol( fs_path, subvol_id ):
     command= "/sbin/btrfs sub set {subvol_id} {fs_path}".format(**locals())
     subprocess.check_call(command, shell=True)    
 
-def create_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_subvol=True):
+def create_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_subv=True):
     '''Creates default subvolumes, and snapshots directory structure, migrating any existing data'''
-    subvol_path= {"":"root", "home":"home"} #path of a subvolume inside the root subvolume
+    SUBVOL_NAME= {"":"root", "home":"home"} #path of a subvolume inside the root subvolume
     SNAPSHOT_PATH= "snapshots"			#snapshot directory, inside the root subvolume    
-    TMP_SUBVOL_PREFIX="-subvol"
-    print "creating btrfs base structure on {rootsubvol_mountpoint}".format(**locals())
-    def snapshot_path( subvolume ):
-        return j(SNAPSHOT_PATH, subvol_path[subvolume])
+    SUBVOLUME_PATH="subvolumes"
+    
+    #aliases, imports 
     j= os.path.join
     mountpoint= rootsubvol_mountpoint
+    from disks import is_mountpoint #gpp_sysadmin_library
+    
+    def snapshot_path( subvolume ):
+        return j(mountpoint, SNAPSHOT_PATH, SUBVOL_NAME[subvolume])
+    def subvol_path( subvolume ):
+        return j(mountpoint, SUBVOLUME_PATH, SUBVOL_NAME[subvolume]) 
+    
+    print "creating btrfs base structure on {rootsubvol_mountpoint}".format(**locals())
     oldlisting= os.listdir(mountpoint)
     
     assert is_mountpoint(mountpoint)
-    assert len(subvolumes) and set( subvolumes )<set(subvol_path.keys())
+    assert len(subvolumes) and set( subvolumes )<set(SUBVOL_NAME.keys())
+    
+    print "creating dirs"
+    if not os.path.isdir(j(mountpoint, SNAPSHOT_PATH)):
+        os.mkdir(j(mountpoint, SNAPSHOT_PATH))
+    if not os.path.isdir(j(mountpoint, SUBVOLUME_PATH)):
+        os.mkdir(j(mountpoint, SUBVOLUME_PATH))
 
-    snapshot(mountpoint, j(mountpoint, subvol_path[""]))
-    print "creating snapshots dirs"
-    os.mkdir( j(mountpoint, SNAPSHOT_PATH))
     for subvol in subvolumes:
-        os.mkdir( j(mountpoint, snapshot_path(subvol) )) 
+        snapshot( j(mountpoint, subvol), subvol_path(subvol) )
+        os.mkdir( snapshot_path(subvol) ) 
 
-    if ("" in subvolumes) and set_default_subvol:
-        print "setting default subvolume"
-        set_default_subvol( mountpoint, get_subvolume_id( mountpoint, subvol_path[""] ) )
+    if ("" in subvolumes) and set_default_subv:
+        set_default_subvol( mountpoint, get_subvolume_id( mountpoint, SUBVOL_NAME[""] ) )
 
 #--------------- This section pertains to the btrfs-snapshot script-------------------------------
 
 def get_btrfs_snapshot_path():
     '''gets the path to the btrfs-snapshot script'''
     module_path= os.path.dirname(os.path.abspath(__file__)) #path to this module
-    p= os.join( module_path, "btrfs-snapshot")
+    p= os.path.join( module_path, "btrfs-snapshot")
     assert os.path.exists(p)
     return p 
     
@@ -79,7 +90,7 @@ def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/med
     print "installing btrfs-snapshot on {mountpoint}".format(**locals())
     source_script_path= get_btrfs_snapshot_path()
     assert any(map(os.path.exists, ("/sbin/anacron", "/usr/sbin/anacron"))) #check anacron is installed
-    assert not os.path.exists(SCRIPT_PATH)	#check btrfs-snapshot not installed
+    assert not os.path.exists(SCRIPT_PATH+"/btrfs-snapshot")	#check btrfs-snapshot not installed
     assert os.path.isdir( snap_path )
     def check_not_installed(s):
         s= "cat {0} | grep btrfs-snapshot | cat -".format(s)
@@ -93,7 +104,9 @@ def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/med
         '''@monthly	21	monthly_snap	{SCRIPT_PATH}/btrfs-snapshot {fs_path} {snap_path} monthly {monthly} \n'''
         '''365		26	yearly_snap	{SCRIPT_PATH}/btrfs-snapshot {fs_path} {snap_path} yearly  {yearly}  \n'''
         ).format(**locals())
+    #copy script
     subprocess.check_call("cp btrfs-snapshot "+SCRIPT_PATH, shell=True)
+    #append anacrontab lines
     open(os.path.join(mountpoint, "etc","anacrontab"), "a").write( anacron_string )
 
 #------------------------------------------------------------------------------------------------
