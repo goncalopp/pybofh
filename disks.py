@@ -8,12 +8,12 @@ class MountedFile(object):
         with MountedFile(filepath, mountpoint) as mountpoint:'''
     
     def __init__(self, file, mountpoint, options=""):
-        self.file, self.mountpoint= file, mountpoint
+        self.file, self.mountpoint, self.options= file, mountpoint, options
         self.mounted= False
         
     def __enter__(self):
-        if is_mountpoint(mountpoint):
-            raise Exception("Mountpoint already mounted: "+mountpoint)
+        if is_mountpoint(self.mountpoint):
+            raise Exception("Mountpoint already mounted: "+self.mountpoint)
         mount(self.file, self.mountpoint, self.options)
         self.mounted= True
         return self.mountpoint
@@ -23,7 +23,7 @@ class MountedFile(object):
             unmount( self.mountpoint )
             self.mounted=False
             try:
-                self.exit_callback()
+                self.exit_callback(self)
             except AttributeError:
                 pass #not set
 
@@ -41,7 +41,7 @@ class UnencryptedFile(object):
 
     def __enter__(self):
         ie= isEncrypted(self.file)
-        if not allow_nullop and not ie:
+        if not self.allow_nullop and not ie:
             raise Exception("File is not encrypted")
         if ie:
             self.decrypted_file= open_encrypted_disk( self.file )
@@ -71,8 +71,9 @@ class MountPool(object):
         '''returns a MountedFile, to be used in a "with" statement'''
         try:
             m= MountedFile( file, self.free_mountpoints.pop(), options )
-            self.used_mountpoints.append(m)
+            self.used_mountpoints.append(m.mountpoint)
             m.exit_callback= self._return_to_pool
+            return m
         except IndexError:
             raise Exception("No free mountpoints in pool")
 

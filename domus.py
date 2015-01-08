@@ -82,6 +82,12 @@ def getDomuDiskMountpoint(domu_disk):
     suffix= d[d.index("_")+1:]
     return MOUNTPOINT_MAP[suffix]
 
+def getConfigurationFile(domu):
+    '''Given the DomU name, returns its configuration file'''
+    BASEPATH= "/etc/xen/"
+    p= BASEPATH + domu + ".cfg"
+    return p
+
 #-----------------
 
 if __name__=="__main__":
