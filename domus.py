@@ -8,6 +8,7 @@ from functools import partial
 
 import lvm
 import disks
+from site_specific import getDomuDisks, getDomuDiskMountpoint
 from cli import python_cli
 
 def allDomus():
@@ -64,31 +65,6 @@ def umountDomuDisks( domu_vg, domu, mountpoint ):
             m= os.path.join(mountpoint, dm[1:])
             print "unmounting "+d+" on "+m 
             disks.umount(m)
-
-#-------FUNCTIONS BELOW INCORPORATE KNOWLEDGE ABOUT DISK NAMING CONVENTIONS
-
-def getDomuDisks(domu_vg, domu):
-    '''returns the absolute paths to devices (disks) belonging to a DomU'''
-    possible_disks= lvm.getLVs( domu_vg )
-    is_domu_disk= lambda abs_path, domu_name: abs_path.split("/")[-1].startswith(domu_name+'_')
-    f= partial(is_domu_disk, domu_name=domu) 
-    return list(filter(f, possible_disks))
-
-def getDomuDiskMountpoint(domu_disk):
-    '''Given a absolute path to a device (disk) belonging to a DomU,
-    returns its mountpoint in the DomU root filestem (/home, /var, ...)'''
-    MOUNTPOINT_MAP={"root":"/","home":"/home","swap":""}
-    d=os.path.basename(domu_disk)
-    suffix= d[d.index("_")+1:]
-    return MOUNTPOINT_MAP[suffix]
-
-def getConfigurationFile(domu):
-    '''Given the DomU name, returns its configuration file'''
-    BASEPATH= "/etc/xen/"
-    p= BASEPATH + domu + ".cfg"
-    return p
-
-#-----------------
 
 if __name__=="__main__":
     python_cli(globals().values())

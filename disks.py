@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import os,subprocess
+from site_specific import unencrypted_path
 from cli import python_cli
 
 class MountedFile(object):
@@ -119,10 +120,6 @@ def createEncrypted( device_path ):
     command= "cryptsetup luksFormat "+device_path
     subprocess.check_call( command, shell=True )
 
-def unencrypted_path( encrypted_disk_path ):
-    unencrypted_name= os.path.basename(encrypted_disk_path ) 
-    return "/dev/mapper/"+unencrypted_name
-    
 def get_opened_disks( disk_paths ):
     return [open_encrypted_disk(x) if isEncrypted(x) else x for x in disk_paths]
 
