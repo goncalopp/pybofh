@@ -4,6 +4,7 @@ import disks
 import btrfs
 import domus
 import lvm
+import drbd
 
 def reverse_operation( f, args, kwargs ):
     if f==lvm.createLV:
