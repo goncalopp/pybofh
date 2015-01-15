@@ -2,7 +2,7 @@ from functools import partial
 
 import disks
 import btrfs
-import domus
+import xen
 import lvm
 import drbd
 
@@ -13,3 +13,5 @@ def reverse_operation( f, args, kwargs ):
 
 from atomic_operations import AtomicOperationSequence
 Atomic= partial( AtomicOperationSequence, reverse_operation ) 
+
+__all__=[ disks, btrfs, xen, lvm, drbd, Atomic ]

@@ -1,4 +1,4 @@
-#This file contains site-specific values or functions with such knowledge
+#his file contains site-specific values or functions with such knowledge
 
 import os
 
@@ -45,12 +45,4 @@ def getConfigurationFile(domu):
     BASEPATH= "/etc/xen/"
     p= BASEPATH + domu + ".cfg"
     return p
-
-#----------DRBD-------------------------------------------------------------------
-
-def getDrbdDevices():
-    dir="/dev"
-    l= os.listdir(dir)
-    l= [x for x in l if x.startswith('drbd_')]
-    return [os.path.join(dir, x) for x in l]
 

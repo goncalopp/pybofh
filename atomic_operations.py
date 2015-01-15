@@ -4,7 +4,7 @@ class FakeContainer( object ):
     '''Given vars(SOMETHING), where SOMETHING is a class/module/...                 
     acts as if it were SOMETHING on attribute access.                                   
     works recursively, so our attributes are FakeContainer too, unless
-    stop_criteria( attribute ) == True. If it is, return wrap_function( attribute )'''
+    stop_criteria( attribute ) == True. In that case, return wrap_function( attribute )'''
     
     def __init__(self, context, stop_criteria, wrap_function):
         self._context= context
@@ -34,7 +34,7 @@ class AtomicOperationSequence( FakeContainer ):
         FakeContainer.__init__(self, vars, lambda x: callable(x), lambda x: partial( self._run_reversible_function, x )) 
     
     def _run_reversible_function( self, f, *args, **kwargs ):
-        '''wrapper function that execute the wrapped one and schedule the reverse operation on self'''
+        '''wrapper function that executes the wrapped one and schedules the reverse operation on self'''
         reverse_f, reverse_args, reverse_kwargs= self.reverse_function(f, args, kwargs)
         assert callable(reverse_f)
         f(*args, **kwargs)

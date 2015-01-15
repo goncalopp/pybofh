@@ -44,7 +44,7 @@ def create_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_su
     #aliases, imports 
     j= os.path.join
     mountpoint= rootsubvol_mountpoint
-    from disks import is_mountpoint #gpp_sysadmin_library
+    from blockdevice import is_mountpoint #pybofh
     
     def snapshot_path( subvolume ):
         return j(mountpoint, SNAPSHOT_PATH, SUBVOL_NAME[subvolume])
