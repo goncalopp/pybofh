@@ -1,6 +1,7 @@
 from functools import partial
 
 import blockdevice
+import filesystem
 import btrfs
 import xen
 import lvm
@@ -14,4 +15,4 @@ def reverse_operation( f, args, kwargs ):
 from atomic_operations import AtomicOperationSequence
 Atomic= partial( AtomicOperationSequence, reverse_operation ) 
 
-__all__=[ blockdevice, btrfs, xen, lvm, drbd, Atomic ]
+__all__=[ blockdevice, filesystem, btrfs, xen, lvm, drbd, Atomic ]
