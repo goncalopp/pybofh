@@ -1,48 +1,44 @@
 #his file contains site-specific values or functions with such knowledge
 
 import os
-
-DOMU_LVM_VG="g3"
+from functools import partial
+import drbd
 
 
 #------DISKS-------------------------------------------------------------
 
-def unencrypted_path( encrypted_disk_path ):
-    unencrypted_name= os.path.basename(encrypted_disk_path )
-    return "/dev/mapper/"+unencrypted_name
+def decrypted_path( encrypted_disk_path ):
+    decrypted_name= os.path.basename(encrypted_disk_path )
+    return "/dev/mapper/"+decrypted_name
 
 #-------XEN-----------------------------------------------------------------
 
-def getDomuDisks(domu):
-    '''returns the absolute paths to devices (disks) belonging to a DomU'''
-    import lvm
-    possible_disks= lvm.getLVs( DOMU_LVM_VG ) + getDrbdDevices()
-    def is_domu_disk(path, domu_name):
-        name= os.path.basename(path)
-        lvm_match= name.startswith( domu_name+"_" )
-        drbd_match= name.startswith( "drbd_"+domu_name+"_" )
-        match= lvm_match or drbd_match
-        if match:
-            try:
-                getDomuDiskMountpoint(domu_disk)
-            except:
-                print "path {} matched DomU {}, but getMountpoint failed. Ignoring it.".format(path, domu_name)
-                return False
-        return match
-    f= partial(is_domu_disk, domu_name=domu) 
-    return list(filter(f, possible_disks))
+CFG_DIR='/etc/xen'
+CFG_EXT='.cfg'
+
+def getAllDomuNames():
+    '''returns all the DomU configuration files available to this machine'''
+    all_files= os.listdir(CFG_DIR)
+    cfg_files= filter( lambda x: x.endswith(CFG_EXT), all_files )
+    names= map( lambda f: f[:-len(CFG_EXT)], cfg_files )
+    return names
 
 def getDomuDiskMountpoint(domu_disk):
-    '''Given a absolute path to a device (disk) belonging to a DomU,
+    '''Given a DomuDisk,
     returns its mountpoint in the DomU root filestem (/home, /var, ...)'''
-    MOUNTPOINT_MAP={"root":"/","home":"/home","swap":""}
-    d=os.path.basename(domu_disk)
-    suffix= d[d.index("_")+1:]
-    return MOUNTPOINT_MAP[suffix]
+    MOUNTPOINT_MAP={"root":"/","home":"/home","swap":"","media":"/media"}
+    d=os.path.basename( domu_disk.device )
+    mountpoint_part= d.split("_")[-1]
+    mountpoint_part= mountpoint_part.split("-")
+    suffix, args= mountpoint_part[0],mountpoint_part[1:]
+    mountpoint= MOUNTPOINT_MAP[suffix]
+    print args
+    if args:
+        mountpoint= os.path.join(mountpoint, *args)
+    return mountpoint
 
-def getConfigurationFile(domu):
+def getDomuConfigFile(domu):
     '''Given the DomU name, returns its configuration file'''
-    BASEPATH= "/etc/xen/"
-    p= BASEPATH + domu + ".cfg"
+    p= os.path.join( CFG_DIR, domu + CFG_EXT )
     return p
 

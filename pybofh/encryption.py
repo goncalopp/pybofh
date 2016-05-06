@@ -1,26 +1,25 @@
 import subprocess
 from cli import python_cli
-from site_specific import unencrypted_path
+from site_specific import decrypted_path
+import blockdevice
+import os, os.path
 
-class Unencrypted(object):
-    '''A class that represents a unencrypted block device.
+LUKS_SECTOR_SIZE= 512 #this seems hardcoded into luks, so hopefully it's safe to keep it there
+
+class Encrypted(blockdevice.OuterLayer):
+    @property
+    def inner(self):
+        return Decrypted(self)
+
+class Decrypted(blockdevice.InnerLayer):
+    '''A class that represents a decrypted block device.
     Use as a context manager'''
+    def _open(self):
+        path= open_encrypted( self.outer.blockdevice.path, allow_noop=True )
+        return path
     
-    def __init__(self, device, allow_noop=True):
-        '''if allow_noop is True, don't error out if the device is not encrypted, 
-        and return the device itself on entering the context manager'''
-        self.device= device
-        self.allow_noop= allow_noop
-        self.decrypted= False
-
-    def __enter__(self):
-        self.decrypted_device= open_encrypted( self.device, allow_noop=self.allow_noop )
-        return self.decrypted_device
-    
-    def __exit__( self, e_type, e_value, e_trc ):
-        decrypted= self.decrypted_device != self.device
-        if decrypted:
-            close_encrypted( self.decrypted_device )
+    def _close( self  ):
+        close_encrypted( self.path )
 
 def create_encrypted( device ):
     print "formatting new encrypted disk on {device}".format(**locals())
@@ -28,33 +27,39 @@ def create_encrypted( device ):
     command= "cryptsetup luksFormat "+device
     subprocess.check_call( command, shell=True )
 
-def is_encrypted( device ):
-    out= subprocess.check_output( "file --special --dereference "+device, shell=True)
-    return "LUKS" in out
-
 def open_encrypted( device, allow_noop=False ):
-    '''unencrypt if needed. return path to unencrypted disk device'''
-    if not is_encrypted(device):
-        if allow_noop:
-            return device
-        else:
-            raise Exception("device is not encrypted: {}".format(device))
+    '''decrypt and return path to decrypted disk device'''
     print "opening encrypted disk {device}".format(**locals())
-    u_path= unencrypted_path( device )
-    assert u_path != device #otherwise we can't tell nullop from op
-    u_name= os.path.basename(u_path)
-    if not os.path.exists(u_path): #already opened
-        command='/sbin/cryptsetup luksOpen {0} {1}'.format(device, u_name)
-        p=subprocess.Popen(command, shell=True)
-        p.wait()
-        if p.returncode!=0:
-            raise Exception("error decrypting "+device)
+    name= luks_name( device )
+    command='/sbin/cryptsetup luksOpen {0} {1}'.format(device, name)
+    subprocess.check_call(command, shell=True)
+    u_path= luks_path( name )
+    assert os.path.exists(u_path)
     return u_path
 
 def close_encrypted( path ):
     print "closing encrypted disk {path}".format(**locals())
     command= '/sbin/cryptsetup luksClose {0}'.format( path )
+    subprocess.check_call( command, shell=True )
+
+def resize( path, size_bytes=None, max=False ):
+    assert size_bytes or max
+    assert size_bytes % LUKS_SECTOR_SIZE == 0
+    size= size_bytes / 512 if size_bytes else None
+    command= '/sbin/cryptsetup resize {0} {1}'.format( size if size else "", path)
     subprocess.check_call( command )
 
+def luks_name( blockdevice ):
+    '''given a path to a blockdevice, returns the LUKS name used to identify it.
+    This will be likely site-specific, and this function should be overriden'''
+    return os.path.split(blockdevice)[-1]
+
+def luks_path( luks_name ):
+    '''Given a LUKS device name, returns its decrypted path.
+    Usually /dev/mapper/NAME'''
+    return '/dev/mapper/'+luks_name
+
+blockdevice.register_data_class( "LUKS", Encrypted )
+
 if __name__=="__main__":
-    python_cli([create_encrypted, is_encrypted, open_encrypted, close_encrypted])
+    python_cli([create_encrypted, open_encrypted, close_encrypted])
