@@ -21,7 +21,52 @@ def register_data_class( string_match, cls, priority=False ):
     else:
         data_classes.append( tup )
  
-class BlockDevice( object ):
+class Resizeable(object):
+    __metaclass__=ABCMeta
+    class WrongSize(Exception):
+        '''raised when asked to resize someting to a impossible size'''
+        pass
+
+    @property
+    @abstractmethod
+    def size(self):
+        '''returns the size of this, in bytes'''
+        pass
+
+    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True ):
+        '''byte_size is the new size of the filesytem.
+        if relative==True, the new size will be current_size+byte_size.
+        if minimum==True, will resize to the minimum size possible.
+        if maximum==True, will resize to the maximum size possible.
+        if approximate==True, will automatically round DOWN according to resize_granularity'''
+        if relative:
+            byte_size+= self.size
+        gr= self.resize_granularity
+        if not approximate and (byte_size % gr)!=0:
+            raise self.WrongSize("Can't resize to {}, as it's not a multiple of the resize granularity ({})".format(byte_size, gr))
+        byte_size= int(byte_size / gr) * gr
+        assert int(bool(byte_size)) + int(minimum) + int(maximum) == 1
+        assert byte_size % self.resize_granularity == 0
+        self._resize(byte_size, minimum, maximum, interactive)
+        pass
+
+    @abstractmethod
+    def _resize(self, byte_size, minimum, maximum, interactive):
+        pass
+
+
+    @property
+    @abstractmethod
+    def resize_granularity(self):
+        '''Returns the minimum size in bytes that this lass suports resizing on.
+        Example: block size'''
+        pass
+
+    
+     
+
+class BaseBlockDevice( Resizeable ):
+    __metaclass__=ABCMeta
     def __init__(self, device_path):
         self._set_path( device_path )
 
@@ -42,13 +87,6 @@ class BlockDevice( object ):
             raise Exception("Block device is not ready (path not set)")
         return self._path
 
-    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True):
-        '''byte_size is the new size of the filesytem.
-        if relative==True, the new size will be current_size+byte_size.
-        if minimum==True, will resize to the minimum size possible.
-        if maximum==True, will resize to the maximum size possible.'''
-        raise NotImplementedError  #implementation up to subclasses
-
     def __repr__(self):
         return "{}< {} >".format(self.__class__.__name__, self.path)
  
@@ -60,13 +98,17 @@ class BlockDevice( object ):
             if k(self):
                 return v(self)
         return None #data type not recognized
+
+class BlockDevice(BaseBlockDevice):
+    def _resize(self, *args, **kwargs):
+        raise NotImplementedError
  
-class Data(object):
+class Data(Resizeable):
     __metaclass__=ABCMeta
     '''A representation of the data of a block device.
     Example: the data of a LV could be LUKS'''
     def __init__(self, blockdevice):
-        if not isinstance(blockdevice, BlockDevice):
+        if not isinstance(blockdevice, BaseBlockDevice):
             raise Exception("You tried to initialize a new Data object without providing a parent block device")
         self.blockdevice= blockdevice
 

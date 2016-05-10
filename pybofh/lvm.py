@@ -1,12 +1,13 @@
 import os
 import subprocess
 from misc import sfilter, rsplit
-from pybofh.blockdevice import BlockDevice
+from pybofh.blockdevice import BaseBlockDevice
 
 
 REMOVED= '[REMOVED]'
 
-class PV(BlockDevice):
+#Should the PV class be a InnerLayer instead of a BlockDevice?...
+class PV(BaseBlockDevice):
     def __init__(self, device):
         self.device= device
 
@@ -20,6 +21,13 @@ class PV(BlockDevice):
     def remove(self):
         removePV(self.device)
         self.device= REMOVED
+    
+    @property
+    def resize_granularity(self):
+        raise NotImplementedError
+
+    def _resize(self, byte_size, minimum, maximum, interactive):   
+        raise NotImplementedError
 
 class VG(object):
     def __init__(self, vg_name):
@@ -51,7 +59,7 @@ class VG(object):
         removeVG(self.name)
         self.name= REMOVED
 
-class LV(BlockDevice):
+class LV(BaseBlockDevice):
     def __init__( self, vg, lv_name ):
         if not isinstance(vg, VG):
             vg= VG(vg)
@@ -73,16 +81,15 @@ class LV(BlockDevice):
         self.vg= REMOVED
         self.name= REMOVED
 
-    def resize(self, byte_size=None, relative=None, minimum=None, maximum=None, interactive=True):
+    @property
+    def resize_granularity(self):
+        return 1 #LVs can have any size
+
+    def _resize(self, byte_size, minimum, maximum, interactive):
         if minimum or maximum or not interactive:
             raise Exception("Options not supported: minimum, maximum, not interactive")
-        if byte_size % (1024*1024) != 0:
-            raise Exception("size must be a multiple of 1 megabyte")
-        byte_size= byte_size / (1024*1024)
-        prefix= "" if not relative else "+" if byte_size>=0 else "-"
-        if prefix=="-":
-            byte_size= abs(byte_size)
-        subprocess.check_call( ["lvresize", "--size", prefix+str(byte_size)], self.path)
+        ssize= str(byte_size) + "b"
+        subprocess.check_call( ["lvresize", "--size", ssize], self.path)
 
 
 def getVGs():

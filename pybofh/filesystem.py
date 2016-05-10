@@ -1,19 +1,12 @@
 from abc import ABCMeta, abstractmethod
 import subprocess
+from blockdevice import Resizeable
 
 
-class BaseFilesystem(object):
+class BaseFilesystem(Resizeable):
     __metaclass__= ABCMeta
     def __init__(self, device):
         self.device= device
-
-    @abstractmethod
-    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True):
-        '''byte_size is the new size of the filesytem.
-        if relative==True, the new size will be current_size+byte_size.
-        if minimum==True, will resize to the minimum size possible.
-        if maximum==True, will resize to the maximum size possible.'''
-        raise NotImplementedError
 
     @property
     def size(self):

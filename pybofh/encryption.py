@@ -11,6 +11,12 @@ class Encrypted(blockdevice.OuterLayer):
     def inner(self):
         return Decrypted(self)
 
+    def resize_granularity(self):
+        raise NotImplementedError
+
+    def _resize(self, byte_size, minimum, maximum, interactive):
+        raise NotImplementedError
+
 class Decrypted(blockdevice.InnerLayer):
     '''A class that represents a decrypted block device.
     Use as a context manager'''
@@ -20,7 +26,7 @@ class Decrypted(blockdevice.InnerLayer):
     
     def _close( self  ):
         close_encrypted( self.path )
-
+    
 def create_encrypted( device ):
     print "formatting new encrypted disk on {device}".format(**locals())
     assert os.path.exists(device) 
