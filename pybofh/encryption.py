@@ -11,6 +11,10 @@ class Encrypted(blockdevice.OuterLayer):
     def inner(self):
         return Decrypted(self)
 
+    @property
+    def size(self):
+        raise NotImplementedError
+
     def resize_granularity(self):
         raise NotImplementedError
 

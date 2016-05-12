@@ -1,7 +1,7 @@
 from pybofh.misc import file_type
 import subprocess
 import os
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import partial
 
 #this is a lit of 2-tuples that is used for other modules to be able to register Data subclasses.
@@ -38,8 +38,7 @@ class Resizeable(object):
         '''raised when asked to resize someting to a impossible size'''
         pass
 
-    @property
-    @abstractmethod
+    @abstractproperty
     def size(self):
         '''returns the size of this, in bytes'''
         pass
@@ -66,15 +65,12 @@ class Resizeable(object):
         pass
 
 
-    @property
-    @abstractmethod
+    @abstractproperty
     def resize_granularity(self):
         '''Returns the minimum size in bytes that this lass suports resizing on.
         Example: block size'''
         pass
 
-    
-     
 
 class BaseBlockDevice( Resizeable ):
     __metaclass__=ABCMeta
@@ -114,6 +110,10 @@ class BaseBlockDevice( Resizeable ):
         return None #data type not recognized
 
 class BlockDevice(BaseBlockDevice):
+    @property
+    def resize_granularity(self):
+        raise NotImplementedError
+
     def _resize(self, *args, **kwargs):
         raise NotImplementedError
  
@@ -135,8 +135,7 @@ class OuterLayer(Data):
     This acts as a context manager'''
     __metaclass__=ABCMeta
     
-    @property
-    @abstractmethod
+    @abstractproperty
     def inner(self):
         '''returns the InnerLayer''' 
         pass

@@ -1,6 +1,6 @@
 import unittest
 import pybofh
-from pybofh import lvm, encryption, blockdevice
+from pybofh import lvm, encryption, blockdevice, filesystem
 
 TEST_BLOCKDEVICE= '/dev/vgpersonal/lv_as_pv'
 TEST_VG= 'test_lv_pybofh'
@@ -31,6 +31,15 @@ class LUKSTest(unittest.TestCase):
             size= decrypted.size
             data= decrypted.data
 
+class FilesystemTest(unittest.TestCase):
+    def test_filesystem(self):
+        bd= blockdevice.BlockDevice(TEST_BLOCKDEVICE)
+        filesystem.Ext3.create(TEST_BLOCKDEVICE)
+        fs= bd.data
+        self.assertIsInstance(fs, filesystem.Ext3)
+        size= fs.size
+        self.assertGreater(size, 0)
+        self.assertLess(size, 1*1024*1024*1024*1024) #1TB
 
 
 if __name__ == '__main__':

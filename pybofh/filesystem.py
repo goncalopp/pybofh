@@ -1,13 +1,13 @@
 from abc import ABCMeta, abstractmethod
 import subprocess
-from blockdevice import Resizeable
+from pybofh import blockdevice
 
 
-class BaseFilesystem(Resizeable):
+class BaseFilesystem(blockdevice.Data):
     __metaclass__= ABCMeta
     def __init__(self, device):
         self.device= device
-
+    
     @property
     def size(self):
         '''the size of the filesystem in bytes'''
@@ -17,13 +17,25 @@ class BaseFilesystem(Resizeable):
     def _get_size(self):
         raise NotImplementedError
 
-class Ext2(BaseFilesystem):
-    NAME="ext2"
-    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True):
-        if byte_size is not None and byte_size%1024!=0:
-            raise Exception("Can only resize ext filesystem in multiples of 1KB")
-        if relative:
-            byte_size+= self.size
+    @classmethod
+    def create(cls, device, *args, **kwargs):
+        path= device.path if isinstance(device, blockdevice.BaseBlockDevice) else device
+        cls._create(path, *args, **kwargs)
+
+    @classmethod
+    def _create(cls, path, *args, **kwargs):
+        raise NotImplementedError
+
+
+class ExtX(BaseFilesystem):
+    __metaclass__= ABCMeta
+
+    @property
+    def resize_granularity(self):
+        return 1*1024 #1K is the smallest we can promise
+
+    def _resize(self, byte_size, minimum, maximum, interactive):
+        path= self.device.path
         kb_size= byte_size / 1024
         args=[]
         if interactive:
@@ -31,9 +43,9 @@ class Ext2(BaseFilesystem):
         if maximum:
             pass #no more arguments
         elif minimum:
-            args+=["-M", self.device]
+            args+=["-M", path]
         else:
-            args+= [self.device, str(kb_size)+"K" ]
+            args+= [path, str(kb_size)+"K" ]
         subprocess.check_call( ["resize2fs"]+args )
 
     def _get_size(self):
@@ -42,7 +54,7 @@ class Ext2(BaseFilesystem):
         return int(bc)*int(bs)
 
     def get_ext_info(self):
-        out= subprocess.check_output(["dumpe2fs","-h", self.device])
+        out= subprocess.check_output(["dumpe2fs","-h", self.device.path])
         data={}
         for line in out.splitlines():
             try:
@@ -55,17 +67,22 @@ class Ext2(BaseFilesystem):
                 pass
         return data
 
-class Ext3(Ext2):
+    @classmethod
+    def _create(cls, path, *args, **kwargs):
+        command= "mkfs.{}".format(cls.NAME)
+        subprocess.check_call([command, path])
+
+
+class Ext2(ExtX):
+    NAME="ext2"
+
+class Ext3(ExtX):
     NAME="ext3"
 
-class Ext4(Ext3):
+class Ext4(ExtX):
     NAME="ext4"
 
-def Filesystem(device):
-    out= subprocess.check_output(["file", "-Ls", device])
-    for fsc in filesystem_classes:
-        if fsc.NAME in out:
-            return fsc(device)
-    raise Exception("no filesystem class found for "+out)
+blockdevice.register_data_class("ext2", Ext2)
+blockdevice.register_data_class("ext3", Ext3)
+blockdevice.register_data_class("ext4", Ext4)
 
-filesystem_classes=[Ext2, Ext3, Ext4]

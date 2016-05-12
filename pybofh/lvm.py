@@ -19,6 +19,10 @@ class PV(blockdevice.Data):
         self.blockdevice= REMOVED
     
     @property
+    def size(self):
+        raise NotImplementedError
+
+    @property
     def resize_granularity(self):
         raise NotImplementedError
 
