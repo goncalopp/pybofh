@@ -1,26 +1,22 @@
 import os
 import subprocess
 from misc import sfilter, rsplit
-from pybofh.blockdevice import BaseBlockDevice
+from pybofh import blockdevice
 
 
 REMOVED= '[REMOVED]'
 
-#Should the PV class be a InnerLayer instead of a BlockDevice?...
-class PV(BaseBlockDevice):
-    def __init__(self, device):
-        self.device= device
-
+class PV(blockdevice.Data):
     def create(self, **kwargs):
-        createPV(self.device, **kwargs)
+        createPV(self.blockdevice.path, **kwargs)
 
     def createVG(self, name, **kwargs):
-        createVG(name, self.device, **kwargs)
+        createVG(name, self.blockdevice.path, **kwargs)
         return VG(name)
 
     def remove(self):
-        removePV(self.device)
-        self.device= REMOVED
+        removePV(self.blockdevice.path)
+        self.blockdevice= REMOVED
     
     @property
     def resize_granularity(self):
@@ -59,7 +55,7 @@ class VG(object):
         removeVG(self.name)
         self.name= REMOVED
 
-class LV(BaseBlockDevice):
+class LV(blockdevice.BaseBlockDevice):
     def __init__( self, vg, lv_name ):
         if not isinstance(vg, VG):
             vg= VG(vg)
@@ -137,3 +133,5 @@ def removePV(device):
     print "deleting PV {device}".format(**locals())
     command="/sbin/pvremove {device}".format(**locals())
     subprocess.check_call(command, shell=True)
+
+blockdevice.register_data_class("LVM2 PV", PV)

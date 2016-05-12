@@ -2,6 +2,7 @@ from pybofh.misc import file_type
 import subprocess
 import os
 from abc import ABCMeta, abstractmethod
+from functools import partial
 
 #this is a lit of 2-tuples that is used for other modules to be able to register Data subclasses.
 #each key (first tuple element) is a function that takes the block device instance and returns True iff the data of that block device can
@@ -11,15 +12,25 @@ from abc import ABCMeta, abstractmethod
 #example: lambda path: filetype(path)=='Ext2', Ext2Class
 data_classes=[] 
  
-def register_data_class( string_match, cls, priority=False ):
-    '''registers a certain string such that, if the result of calling (the command) file of a block device
-    contains the string, we should use cls(path) to represent the block device data'''
-    k= lambda bd: string_match in file_type(bd.path)
-    tup= (k,cls)
-    if priority:
-        data_classes.insert(0, tup)
+def is_data_class_filetype( string_match, blockdevice ):
+    '''Checks if a blockdevice belongs to a dat a class by testing if a substring
+    exists on its file type'''
+    return string_match in file_type(blockdevice.path)
+
+def register_data_class( match_obj, cls, priority=False ):
+    '''Registers a class that represents a Data subclass - Ext2, for example.
+    If match_obj is a function, it should take a single argument - a block device path - and return True iff cls is a appropriate representation of that block device content.
+    If match_obj is a string, it checks the filetype of the bock device matches that string instead'''
+    if isinstance(match_obj, basestring):
+        string_match= match_obj
+        f= partial(is_data_class_filetype, string_match)
+    elif callable(match_obj):
+        f= match_obj
     else:
-        data_classes.append( tup )
+        raise ValueError("match_obj must be a string or a callable")
+    tup= (f,cls)
+    pos= 0 if priority else len(data_classes)
+    data_classes.insert(pos, tup)
  
 class Resizeable(object):
     __metaclass__=ABCMeta
@@ -67,7 +78,10 @@ class Resizeable(object):
 
 class BaseBlockDevice( Resizeable ):
     __metaclass__=ABCMeta
-    def __init__(self, device_path):
+    def __init__(self, device_path, skip_validation=False):
+        if not skip_validation:
+            if not os.path.exists(device_path):
+                raise Exception("Blockdevice path {} does not exist".format(device_path))
         self._set_path( device_path )
 
     @property
@@ -88,7 +102,7 @@ class BaseBlockDevice( Resizeable ):
         return self._path
 
     def __repr__(self):
-        return "{}< {} >".format(self.__class__.__name__, self.path)
+        return "{}<{}>".format(self.__class__.__name__, self.path)
  
     @property
     def data(self):
@@ -108,6 +122,9 @@ class Data(Resizeable):
     '''A representation of the data of a block device.
     Example: the data of a LV could be LUKS'''
     def __init__(self, blockdevice):
+        if isinstance(blockdevice, basestring):
+            path= blockdevice #assume this is a path to a blockdevice
+            blockdevice= BlockDevice(path)
         if not isinstance(blockdevice, BaseBlockDevice):
             raise Exception("You tried to initialize a new Data object without providing a parent block device")
         self.blockdevice= blockdevice
@@ -134,7 +151,7 @@ class InnerLayer(BlockDevice):
     def __init__(self, outer_layer):
         self.outer= outer_layer
         self.was_opened= False
-        super(InnerLayer, self).__init__(None)
+        super(InnerLayer, self).__init__(None, skip_validation=True)
 
     def __enter__(self):
         if (self.is_open and not self.allow_enter_if_open) or self.was_opened:
