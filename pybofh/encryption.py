@@ -7,9 +7,8 @@ import os, os.path
 LUKS_SECTOR_SIZE= 512 #this seems hardcoded into luks, so hopefully it's safe to keep it there
 
 class Encrypted(blockdevice.OuterLayer):
-    @property
-    def inner(self):
-        return Decrypted(self)
+    def get_inner(self, *args, **kwargs):
+        return Decrypted(self, *args, **kwargs)
 
     @property
     def size(self):
@@ -24,25 +23,37 @@ class Encrypted(blockdevice.OuterLayer):
 class Decrypted(blockdevice.InnerLayer):
     '''A class that represents a decrypted block device.
     Use as a context manager'''
+    def __init__(self, outer_layer, key_file=None):
+        super(Decrypted,self).__init__(outer_layer)
+        self.key_file= key_file
+
     def _open(self):
-        path= open_encrypted( self.outer.blockdevice.path, allow_noop=True )
+        path= open_encrypted( self.outer.blockdevice.path, key_file=self.key_file )
         return path
     
     def _close( self  ):
         close_encrypted( self.path )
     
-def create_encrypted( device ):
+def create_encrypted( device, key_file=None, interactive=True ):
     print "formatting new encrypted disk on {device}".format(**locals())
     assert os.path.exists(device) 
-    command= "cryptsetup luksFormat "+device
-    subprocess.check_call( command, shell=True )
+    command= ['/sbin/cryptsetup', 'luksFormat']
+    if key_file:
+        command.extend(['--key-file', key_file])
+    if not interactive:
+        command.extend(['--batch-mode', '--verify-passphrase'])
+    command.append(device)
+    subprocess.check_call( command )
 
-def open_encrypted( device, allow_noop=False ):
+def open_encrypted( device, key_file=None ):
     '''decrypt and return path to decrypted disk device'''
     print "opening encrypted disk {device}".format(**locals())
     name= luks_name( device )
-    command='/sbin/cryptsetup luksOpen {0} {1}'.format(device, name)
-    subprocess.check_call(command, shell=True)
+    command= ['/sbin/cryptsetup', 'luksOpen']
+    if key_file:
+        command.extend(['--key-file', key_file])
+    command.extend([device, name])
+    subprocess.check_call(command)
     u_path= luks_path( name )
     assert os.path.exists(u_path)
     return u_path

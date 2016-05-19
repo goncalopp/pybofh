@@ -135,9 +135,14 @@ class OuterLayer(Data):
     This acts as a context manager'''
     __metaclass__=ABCMeta
     
-    @abstractproperty
+    @property
     def inner(self):
-        '''returns the InnerLayer''' 
+        '''returns the InnerLayer. 
+        This is a convenience property to call get_inner without arguments''' 
+        return self.get_inner()
+
+    @abstractmethod
+    def get_inner(self, *args, **kwargs):
         pass
 
 class InnerLayer(BlockDevice):

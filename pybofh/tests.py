@@ -4,6 +4,8 @@ from pybofh import lvm, encryption, blockdevice, filesystem
 
 TEST_BLOCKDEVICE= '/dev/vgpersonal/lv_as_pv'
 TEST_VG= 'test_lv_pybofh'
+LUKS_KEY= '3r9b4g3v9no3'
+LUKS_KEYFILE= 'luks_test_keyfile'
 
 class LVMTest(unittest.TestCase):
     def test_lvm(self):
@@ -19,14 +21,12 @@ class LVMTest(unittest.TestCase):
 
 class LUKSTest(unittest.TestCase):
     def test_luks(self):
-        encryption.create_encrypted(TEST_BLOCKDEVICE)
+        encryption.create_encrypted(TEST_BLOCKDEVICE, key_file=LUKS_KEYFILE, interactive=False)
         bd= blockdevice.BlockDevice(TEST_BLOCKDEVICE)
         encrypted= bd.data
-        decrypted= encrypted.inner
+        decrypted= encrypted.get_inner(key_file=LUKS_KEYFILE)
         with self.assertRaises(Exception):
             inner_size= inner.size
-        with self.assertRaises(Exception):
-            inner_size= inner.data
         with decrypted as decrypted:
             size= decrypted.size
             data= decrypted.data
@@ -43,4 +43,6 @@ class FilesystemTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    with open(LUKS_KEYFILE, 'w') as f:
+        f.write(LUKS_KEY)
     unittest.main()
