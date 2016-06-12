@@ -33,13 +33,28 @@ class LUKSTest(unittest.TestCase):
 
 class FilesystemTest(unittest.TestCase):
     def test_filesystem(self):
+        new_size= 100*1024*1024 #100 MB
+        strange_size= 105906179 #~=101 MB, prime
         bd= blockdevice.BlockDevice(TEST_BLOCKDEVICE)
-        filesystem.Ext3.create(TEST_BLOCKDEVICE)
+        fs_cls= filesystem.Ext3
+        #create filesystem
+        fs_cls.create(bd.path)
+        #check it's on the block device as expected
         fs= bd.data
-        self.assertIsInstance(fs, filesystem.Ext3)
-        size= fs.size
-        self.assertGreater(size, 0)
-        self.assertLess(size, 1*1024*1024*1024*1024) #1TB
+        self.assertIsInstance(fs, fs_cls)
+        self.assertGreater(fs.size, 0)
+        self.assertLess(fs.size, 1*1024*1024*1024*1024) #1TB
+        #resize it
+        fs.resize(new_size)
+        self.assertEquals(fs.size, new_size) 
+        fs.resize(strange_size)
+        self.assertAlmostEqual(fs.size, strange_size, delta=4096)
+        self.assertLessEqual(fs.size, strange_size) 
+        fs.resize(strange_size, round_up=True)
+        self.assertAlmostEqual(fs.size, strange_size, delta=4096)
+        self.assertGreaterEqual(fs.size, strange_size) 
+        with self.assertRaises(blockdevice.Resizeable.WrongSize):
+            fs.resize(strange_size, approximate=False)
 
 
 if __name__ == '__main__':

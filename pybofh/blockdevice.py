@@ -43,7 +43,7 @@ class Resizeable(object):
         '''returns the size of this, in bytes'''
         pass
 
-    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True ):
+    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True, round_up=False ):
         '''byte_size is the new size of the filesytem.
         if relative==True, the new size will be current_size+byte_size.
         if minimum==True, will resize to the minimum size possible.
@@ -51,13 +51,19 @@ class Resizeable(object):
         if approximate==True, will automatically round DOWN according to resize_granularity'''
         if relative:
             byte_size+= self.size
-        gr= self.resize_granularity
-        if not approximate and (byte_size % gr)!=0:
-            raise self.WrongSize("Can't resize to {}, as it's not a multiple of the resize granularity ({})".format(byte_size, gr))
-        byte_size= int(byte_size / gr) * gr
-        assert int(bool(byte_size)) + int(minimum) + int(maximum) == 1
+        if byte_size:
+            gr= self.resize_granularity
+            bad_size= (byte_size % gr)!=0
+            if bad_size and not approximate:
+                raise self.WrongSize("Can't resize to {}, as it's not a multiple of the resize granularity ({})".format(byte_size, gr))
+            #round to resize_granularity
+            byte_size= int(byte_size / gr) * gr
+            if round_up and bad_size:
+                byte_size+= gr
+            assert int(bool(byte_size)) + int(minimum) + int(maximum) == 1
         assert byte_size % self.resize_granularity == 0
         self._resize(byte_size, minimum, maximum, interactive)
+        assert self.size == byte_size
         pass
 
     @abstractmethod
