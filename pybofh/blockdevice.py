@@ -43,12 +43,7 @@ class Resizeable(object):
         '''returns the size of this, in bytes'''
         pass
 
-    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True, round_up=False ):
-        '''byte_size is the new size of the filesytem.
-        if relative==True, the new size will be current_size+byte_size.
-        if minimum==True, will resize to the minimum size possible.
-        if maximum==True, will resize to the maximum size possible.
-        if approximate==True, will automatically round DOWN according to resize_granularity'''
+    def _process_resize_size(self, byte_size=None, relative=False, approximate=True, round_up=False):
         if relative:
             byte_size+= self.size
         if byte_size:
@@ -60,11 +55,19 @@ class Resizeable(object):
             byte_size= int(byte_size / gr) * gr
             if round_up and bad_size:
                 byte_size+= gr
-            assert int(bool(byte_size)) + int(minimum) + int(maximum) == 1
         assert byte_size % self.resize_granularity == 0
-        self._resize(byte_size, minimum, maximum, interactive)
+        return byte_size
+
+    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True, round_up=False, **kwargs ):
+        '''byte_size is the new size of the filesytem.
+        if relative==True, the new size will be current_size+byte_size.
+        if minimum==True, will resize to the minimum size possible.
+        if maximum==True, will resize to the maximum size possible.
+        if approximate==True, will automatically round DOWN according to resize_granularity'''
+        assert int(bool(byte_size)) + int(minimum) + int(maximum) == 1
+        byte_size= self._process_resize_size(byte_size, relative, approximate, round_up)
+        self._resize(byte_size, minimum, maximum, interactive, **kwargs)
         assert self.size == byte_size
-        pass
 
     @abstractmethod
     def _resize(self, byte_size, minimum, maximum, interactive):

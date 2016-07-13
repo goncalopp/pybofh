@@ -17,6 +17,10 @@ class BaseFilesystem(blockdevice.Data):
     def _get_size(self):
         raise NotImplementedError
 
+    @abstractmethod
+    def fsck(self):
+        raise NotImplementedError
+
     @classmethod
     def create(cls, device, *args, **kwargs):
         path= device.path if isinstance(device, blockdevice.BaseBlockDevice) else device
@@ -37,6 +41,7 @@ class ExtX(BaseFilesystem):
         return 4*1024 #1K is the smallest we can promise
 
     def _resize(self, byte_size, minimum, maximum, interactive):
+        self.fsck() #otherwise resize2fs refuses to proceed
         path= self.device.path
         kb_size= byte_size / 1024
         args=[]
@@ -54,6 +59,10 @@ class ExtX(BaseFilesystem):
         info= self.get_ext_info()
         bc,bs= info["Block count"], info["Block size"]
         return int(bc)*int(bs)
+
+    def fsck(self):
+        path= self.device.path
+        subprocess.check_call( ["e2fsck", "-f", path] )
 
     def get_ext_info(self):
         out= subprocess.check_output(["dumpe2fs","-h", self.device.path])
