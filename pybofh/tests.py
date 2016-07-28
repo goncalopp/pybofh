@@ -121,9 +121,13 @@ class LVMTest(unittest.TestCase):
         pv.remove()
 
 class LUKSTest(unittest.TestCase):
-    def test_luks(self):
+    def _create(testcase):
         encryption.create_encrypted(TEST_BLOCKDEVICE, key_file=LUKS_KEYFILE, interactive=False)
         bd= blockdevice.BlockDevice(TEST_BLOCKDEVICE)
+        return bd
+
+    def test_luks(self):
+        bd= self._create()
         encrypted= bd.data
         decrypted= encrypted.get_inner(key_file=LUKS_KEYFILE)
         with self.assertRaises(Exception):

@@ -1,8 +1,14 @@
+# -*- encoding: utf-8 -*-
+
 from pybofh.misc import file_type
 import subprocess
 import os
+import os.path
 from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import partial
+import re
+
+DM_DIR= '/dev/mapper/'
 
 #this is a lit of 2-tuples that is used for other modules to be able to register Data subclasses.
 #each key (first tuple element) is a function that takes the block device instance and returns True iff the data of that block device can
@@ -180,9 +186,17 @@ class InnerLayer(BlockDevice):
             self.was_opened= False
 
     @property
-    @abstractmethod
     def is_open(self):
-        pass
+        root= lsblk()
+        path= os.path.realpath(self.outer.blockdevice.path)
+        dm_name= devicemapper_info(path)['Name']
+        outer_node= root.find_node(dm_name)
+        if not len(outer_node.children):
+            return None
+        c1= outer_node.children[0]
+        path= DM_DIR + c1.name
+        assert os.path.exists(path)
+        return path
     
     def open( self ):
         p= self._open()
@@ -201,4 +215,132 @@ class InnerLayer(BlockDevice):
     def _close( self ):
         pass
 
+def get_device_path(device_or_path):
+    '''given either a device object or a device path, returns device path'''
+    try:
+        path= device_or_path.path
+    except AttributeError:
+        path= device_or_path
+    assert os.path.exists(path)
+    return path
 
+
+def devicemapper_info(device_or_path):
+    REGEX= r'(.*): +(.*)\n'
+    ALL_KEYS= ['Major, minor', 'Name', 'Tables present', 'UUID', 'Read Ahead', 'Number of targets', 'State', 'Open count', 'Event number']
+    MIN_KEYS= ['Major, minor', 'Name', 'UUID', 'State', 'Open count']
+    def convert_value(x):
+        try:
+            return int(x)
+        except ValueError:
+            return x
+    path= get_device_path(device_or_path)
+    command= ['/sbin/dmsetup', 'info', path]
+    output= subprocess.check_output(command)
+    kv_pairs= re.findall(REGEX, output)
+    d= {k: convert_value(v) for k,v in kv_pairs}
+    assert set(d.keys()) > set(MIN_KEYS)
+    return d
+
+class LsblkNode(object):
+    def __init__(self, name, major, minor, size, ro, type, mountpoint, parent=None):
+        assert mountpoint!='' #if it's not mounted, should be None
+        assert type in ('disk', 'part', 'lvm', 'crypt', None)
+        self.children= []
+        self.name= name
+        self.major, self.minor= int(major), int(minor)
+        self.size= size #string. example: 43G
+        self.ro= bool(int(ro))
+        self.type= type
+        self.mountpoint= mountpoint
+        self.parent= parent
+
+    def add_child(self, node):
+        self.children.append(node)
+        node.parent= self
+
+    def iterate(self):
+        #Returns all the tree nodes in depth-first-search order
+        yield self
+        for c in self.children:
+            for sub in c.iterate():
+                yield sub
+
+    def find_node(self, node_name, return_one=True):
+        '''finds nodes in the tree that mach the given name'''
+        l= (self,) if self.name==node_name else ()
+        for c in self.children:
+            l+= c.find_node(node_name, return_one=False)
+        if return_one:
+            if len(l)!=1:
+                raise Exception("node not found: {} (or multiple matches)".format(node_name))
+            return l[0]
+        return l
+
+    def __repr__(self):
+        return "{}<{}, {}>".format(self.__class__.__name__, self.name, self.type)
+
+    @staticmethod
+    def create_root():
+        return LsblkNode("lsblk_root", -1, -1, None, 1, None, None)
+
+def lsblk():
+    '''Parses the lsblk command output to get block device dependencies/state
+    Outputs (the root node of) a tree.'''
+    TREE_SYMBOL= u'─'
+    FIELDS=['NAME', 'MAJ:MIN', 'RM', 'SIZE', 'RO', 'TYPE', 'MOUNTPOINT']
+    def indent_level(line):
+        try:
+            i= line.index(TREE_SYMBOL)
+            assert i%2==1 #each indent is two spaces, plus an extra tree char
+        except ValueError:
+            return 0
+        return i/2
+    def parse_line(line):
+        try:
+            text= line[line.index(TREE_SYMBOL)+len(TREE_SYMBOL):]
+        except ValueError:
+            text= line #this is probably a 0-indentation line
+        data= text.split()
+        if len(data)==6:
+            #mountpoint might be missing
+            data.append(None)
+        assert len(data) == 7
+        assert ":" in data[1] #major:minor
+        name, majmin, rm, size, ro, type, mountpoint= data
+        maj,min= majmin.split(":")
+        return name, maj, min, size, ro, type, mountpoint
+    command= ['/bin/lsblk']
+    output= subprocess.check_output(command)
+    output= output.decode('utf-8') #TODO: get system encoding
+    #split lines and verify format
+    lines= output.splitlines()
+    assert lines[0].split()==FIELDS
+    lines=lines[1:] #remove header
+    #parse tree
+    root= LsblkNode.create_root()
+    current_dev_at_indent= {-1:root}
+    for line in lines:
+        indent= indent_level(line)
+        data= parse_line(line)
+        node= LsblkNode(*data)
+        parent= current_dev_at_indent[indent-1]
+        parent.add_child(node)
+        current_dev_at_indent[indent]= node
+    return root
+
+def dm_get_child(blockdevice_path):
+    '''Given a devicemapper block device, returns its child, if any (according to lsblk)'''
+    root= lsblk()
+    path= os.path.realpath(blockdevice_path)
+    assert os.path.exists(path)
+    outer_dir, outer_name= os.path.split(path)
+    assert outer_dir==DM_DIR
+    outer_node= root.find_node(outer_name)
+    if len(outer_node.children)==0:
+        return None
+    assert len(outer_node.children)==1 #a device should have at most 1 child...?
+    c1= outer_node.children[0]
+    path= DM_DIR + c1.name
+    assert os.path.exists(path)
+    return path  

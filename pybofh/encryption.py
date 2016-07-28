@@ -18,7 +18,9 @@ class Encrypted(blockdevice.OuterLayer):
         raise NotImplementedError
 
     def _resize(self, byte_size, minimum, maximum, interactive):
-        raise NotImplementedError
+        if minimum:
+            raise NotImplementedError("The minimum size of a LUKS device would be 0")
+        resize(self.get_inner().path, byte_size, maximum )
 
 class Decrypted(blockdevice.InnerLayer):
     '''A class that represents a decrypted block device.
