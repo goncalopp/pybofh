@@ -6,6 +6,8 @@ from pybofh import lvm, encryption, blockdevice, filesystem, mount
 TEST_BLOCKDEVICE= '/dev/vgpersonal/lv_as_pv'
 TEST_MOUNTPOINT= '/media/tmp'
 TEST_VG= 'test_lv_pybofh'
+TEST_LV= 'one'
+TEST_LV_SIZE= 500*1024*1024 #500MiB
 LUKS_KEY= '3r9b4g3v9no3'
 LUKS_KEYFILE= 'luks_test_keyfile'
 
@@ -47,7 +49,6 @@ def hash_dir(dir_path, base_path=None, flat=True):
         return h.hexdigest()
     else:
         return hash_dict
-
 
 class FilesystemState(object):
     def __init__(self, blockdevice, flat_hash=False):
@@ -107,18 +108,26 @@ class FilesystemState(object):
                     raise #Uh-oh, we cannot write for some reason other than out-of-space
 
 
-
 class LVMTest(unittest.TestCase):
-    def test_lvm(self):
+    @staticmethod
+    def _create_stack(testcase):
         pv= lvm.PV(TEST_BLOCKDEVICE)
         pv.create()
         pv= blockdevice.BlockDevice(TEST_BLOCKDEVICE).data
-        self.assertIsInstance(pv, lvm.PV)
+        testcase.assertIsInstance(pv, lvm.PV)
         vg= pv.createVG(TEST_VG)
-        lv1= vg.createLV('one')
-        lv1.remove()
+        lv1= vg.createLV(TEST_LV, TEST_LV_SIZE) 
+        return pv, vg, lv1
+
+    @staticmethod
+    def _delete_stack(testcase, pv, vg, lv):
+        lv.remove()
         vg.remove()
         pv.remove()
+
+    def test_lvm(self):
+        pv, vg, lv= self._create_stack(self)
+        self._delete_stack(self, pv, vg, lv)
 
 class LUKSTest(unittest.TestCase):
     def _create(testcase):

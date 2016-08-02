@@ -106,7 +106,9 @@ def getLVs(vg, full_path=True):
     else:
         return disks
 
-def createLV(vg, name, size="1GB"):
+def createLV(vg, name, size):
+    if not isinstance(size, basestring):
+        size= str(size)+"B"
     print "creating LV {name} with size={size}".format(**locals())
     command="/sbin/lvcreate {vg} --name {name} --size {size}".format(**locals())
     subprocess.check_call(command, shell=True)
