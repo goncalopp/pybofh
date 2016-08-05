@@ -130,20 +130,47 @@ class LVMTest(unittest.TestCase):
         self._delete_stack(self, pv, vg, lv)
 
 class LUKSTest(unittest.TestCase):
-    def _create(testcase):
-        encryption.create_encrypted(TEST_BLOCKDEVICE, key_file=LUKS_KEYFILE, interactive=False)
+    def _create(testcase, format=True):
+        if format:
+            encryption.create_encrypted(TEST_BLOCKDEVICE, key_file=LUKS_KEYFILE, interactive=False)
         bd= blockdevice.BlockDevice(TEST_BLOCKDEVICE)
-        return bd
-
-    def test_luks(self):
-        bd= self._create()
         encrypted= bd.data
         decrypted= encrypted.get_inner(key_file=LUKS_KEYFILE)
-        with self.assertRaises(Exception):
+        return bd, encrypted, decrypted
+
+    def _check_accessable(testcase, decrypted):
+        testcase.assertTrue(decrypted.is_open)
+        size= decrypted.size
+        data= decrypted.data
+
+    def _check_not_accessable(testcase, decrypted):
+        testcase.assertTrue(not decrypted.is_open)
+        with testcase.assertRaises(Exception):
             inner_size= inner.size
+
+    def test_luks(self):
+        bd, encrypted, decrypted= self._create()
+        self._check_not_accessable(decrypted)
         with decrypted as decrypted:
-            size= decrypted.size
-            data= decrypted.data
+            self._check_accessable(decrypted)
+
+    def test_independent_doubleopen(self):
+        bd, encrypted, decrypted= self._create()
+        bd2, encrypted2, decrypted2= self._create(format=False)
+        self._check_not_accessable(decrypted)
+        self._check_not_accessable(decrypted2)
+        with decrypted as decrypted:
+            self._check_accessable(decrypted)
+            self._check_not_accessable(decrypted2)
+            with decrypted2 as decrypted2:
+                self._check_accessable(decrypted)
+                self._check_accessable(decrypted2)
+                self.assertEqual(decrypted.path, decrypted2.path)
+            self._check_accessable(decrypted)
+            self._check_not_accessable(decrypted2)
+        self._check_not_accessable(decrypted)
+        self._check_not_accessable(decrypted2)
+
 
 class FilesystemTest(unittest.TestCase):
     def test_filesystem(self):

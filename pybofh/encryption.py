@@ -7,8 +7,9 @@ import os, os.path
 LUKS_SECTOR_SIZE= 512 #this seems hardcoded into luks, so hopefully it's safe to keep it there
 
 class Encrypted(blockdevice.OuterLayer):
-    def get_inner(self, *args, **kwargs):
-        return Decrypted(self, *args, **kwargs)
+    @property
+    def _inner_layer_class(self):
+        return Decrypted
 
     @property
     def size(self):
@@ -25,15 +26,15 @@ class Encrypted(blockdevice.OuterLayer):
 class Decrypted(blockdevice.InnerLayer):
     '''A class that represents a decrypted block device.
     Use as a context manager'''
-    def __init__(self, outer_layer, key_file=None):
-        super(Decrypted,self).__init__(outer_layer)
-        self.key_file= key_file
+    def __init__(self, outer_layer, **kwargs):
+        super(Decrypted,self).__init__(outer_layer, **kwargs)
 
-    def _open(self):
-        path= open_encrypted( self.outer.blockdevice.path, key_file=self.key_file )
+    def _open(self, **kwargs):
+        key_file= kwargs.get('key_file', None)
+        path= open_encrypted( self.outer.blockdevice.path, key_file=key_file )
         return path
     
-    def _close( self  ):
+    def _close(self):
         close_encrypted( self.path )
     
 def create_encrypted( device, key_file=None, interactive=True ):

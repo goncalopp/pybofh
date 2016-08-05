@@ -38,6 +38,9 @@ def register_data_class( match_obj, cls, priority=False ):
     pos= 0 if priority else len(data_classes)
     data_classes.insert(pos, tup)
  
+class NotReady(Exception):
+    pass
+
 class Resizeable(object):
     __metaclass__=ABCMeta
     class WrongSize(Exception):
@@ -86,6 +89,97 @@ class Resizeable(object):
         Example: block size'''
         pass
 
+class Openable(object):
+    '''Represents an object that can be "opened". The semantics of "opened" are
+    left for subclasses to define.
+    The object can be "externally opened". In that case we consider it open,
+    and don't try to close it when the time comes'''
+    __metaclass__=ABCMeta
+
+    class AlreadyOpen(Exception):
+        pass
+
+    def __init__(self, exclusive=False, reentrant=False, **kwargs):
+        '''Exclusive: disallows open if it is opened externally
+        Reentrant: allows open twice on the same object'''
+        self.was_opened= False
+        self.was_fake_opened= False
+        self.exclusive= exclusive
+        self.reentrant= reentrant
+        self._init_args= kwargs
+        if reentrant:
+            raise NotImplementedError #this is not properly implemented yet
+
+    @abstractmethod
+    def _externally_open_data(self):
+        '''If this Openable was opened by something this object doesn't control
+        ("externally open"), returns the associated data (see open()).
+        Otherwise returns None'''
+        raise NotImplementedError
+
+    @property
+    def is_open(self):
+        '''Returns a boolean indicating if this Openable is open.
+        "open" is defined as open() being called before'''
+        return self.was_opened or self.was_fake_opened
+
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__( self, e_type, e_value, e_trc ):
+        self.close()
+
+    def _on_open(data, true_open):
+        '''Callback executed after a open.
+        Data is whatever is returned by _open(), or None if true_open==True.
+        true_open indicates whether _open was actually called'''
+        pass
+
+    def _on_close(true_close):
+        '''Similar to _on_open'''
+        pass
+
+    @abstractmethod
+    def _open( self, **args ):
+        '''opens and returns data associated with the opened thing.
+        Example: the path to the block device'''
+        raise NotImplementedError
+
+    @abstractmethod
+    def _close( self ):
+        raise NotImplementedError
+
+    def open( self, **kwargs ):
+        '''opens the object'''
+        open_args= dict(self._init_args)  #get constructor args
+        open_args.update(kwargs)          #and open() args
+        externally_open_data=  self._externally_open_data() 
+        is_externally_open= not (externally_open_data is None)
+        true_open= not (self.was_opened or is_externally_open)
+        if self.was_opened and not self.reentrant:
+            raise self.AlreadyOpen("{} was opened before".format(self))
+        if not true_open and self.exclusive:
+            raise self.AlreadyOpen("{} is already opened (by an external mechanism)")
+        if true_open:
+            result= self._open(**open_args)
+            self.was_opened= True
+        else:
+            result= externally_open_data
+            assert result is not None
+            self.was_fake_opened= True
+        self._on_open(result, true_open)
+
+    def close( self ):
+        true_close= self.was_opened
+        if true_close:
+            self._close()
+            self.was_opened= False
+        else:
+            if not self.was_fake_opened:
+                raise self.AlreadyOpen("Device is already closed")
+            self.was_fake_opened= False
+        self._on_close(true_close)
 
 class BaseBlockDevice( Resizeable ):
     __metaclass__=ABCMeta
@@ -109,7 +203,7 @@ class BaseBlockDevice( Resizeable ):
     def path(self):
         '''The path to the file representing the block device'''
         if self._path is None:
-            raise Exception("Block device is not ready (path not set)")
+            raise NotReady("Block device is not ready (path not set)")
         return self._path
 
     def __repr__(self):
@@ -156,37 +250,31 @@ class OuterLayer(Data):
         This is a convenience property to call get_inner without arguments''' 
         return self.get_inner()
 
-    @abstractmethod
-    def get_inner(self, *args, **kwargs):
-        pass
+    def get_inner(self, **kwargs):
+        cls= self._inner_layer_class
+        return cls(self, **kwargs)
 
-class InnerLayer(BlockDevice):
+    @property
+    def overhead(self):
+        oh= self.size - self.get_inner().size
+        assert oh>=0
+        return oh   
+
+    @abstractproperty
+    def _inner_layer_class(self):
+        raise NotImplementedError
+
+class InnerLayer(BlockDevice, Openable):
     '''A inner layer on a layered block device.
     Example: the decrypted part of a LUKS device.''' 
     __metaclass__=ABCMeta
-    class AlreadyOpen(Exception):
-        pass
 
-    def __init__(self, outer_layer):
+    def __init__(self, outer_layer, **kwargs):
         self.outer= outer_layer
-        self.was_opened= False
-        super(InnerLayer, self).__init__(None, skip_validation=True)
+        BlockDevice.__init__(self, None, skip_validation=True)
+        Openable.__init__(self, **kwargs)
 
-    def __enter__(self):
-        if (self.is_open and not self.allow_enter_if_open) or self.was_opened:
-            raise self.AlreadyOpen("block device was already opened (by an unknown mechanism)")
-        if not self.is_open:
-            self.open()
-            self.was_opened= True
-        return self
-    
-    def __exit__( self, e_type, e_value, e_trc ):
-        if self.was_opened:
-            self.close()
-            self.was_opened= False
-
-    @property
-    def is_open(self):
+    def _externally_open_data(self):
         root= lsblk()
         path= os.path.realpath(self.outer.blockdevice.path)
         dm_name= devicemapper_info(path)['Name']
@@ -198,22 +286,13 @@ class InnerLayer(BlockDevice):
         assert os.path.exists(path)
         return path
     
-    def open( self ):
-        p= self._open()
-        self._set_path( p )
+    def _on_open( self, path, true_open ):
+        assert os.path.exists(path)
+        self._set_path( path )
 
-    def close( self ):
-        self._close()
+    def _on_close(self, true_close):
         self._set_path( None )
 
-    @abstractmethod
-    def _open( self ):
-        '''opens and returns the path to the block device'''
-        pass
-
-    @abstractmethod
-    def _close( self ):
-        pass
 
 def get_device_path(device_or_path):
     '''given either a device object or a device path, returns device path'''
