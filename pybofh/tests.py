@@ -5,8 +5,8 @@ from pybofh import lvm, encryption, blockdevice, filesystem, mount
 
 TEST_BLOCKDEVICE= '/dev/vgpersonal/lv_as_pv'
 TEST_MOUNTPOINT= '/media/tmp'
-TEST_VG= 'test_lv_pybofh'
-TEST_LV= 'one'
+TEST_VG= 'test_vg_pybofh'
+TEST_LV= 'test_lv_pybofh'
 TEST_LV_SIZE= 500*1024*1024 #500MiB
 LUKS_KEY= '3r9b4g3v9no3'
 LUKS_KEYFILE= 'luks_test_keyfile'
@@ -125,8 +125,20 @@ class LVMTest(unittest.TestCase):
         vg.remove()
         pv.remove()
 
-    def test_lvm(self):
+    def test_lvm_creation_and_deletion(self):
         pv, vg, lv= self._create_stack(self)
+        self._delete_stack(self, pv, vg, lv)
+    
+    def test_lvm_resize(self):
+        pv, vg, lv= self._create_stack(self)
+        old_size= lv.size
+        new_size= (old_size / 2)
+        gr= lv.resize_granularity
+        lv.resize(new_size, no_data=True, interactive=False)
+        self.assertLess(lv.size, new_size+gr)
+        self.assertGreater(lv.size, new_size-gr)
+        lv.resize(old_size, no_data=True, interactive=False)
+        self.assertEqual(lv.size, old_size)
         self._delete_stack(self, pv, vg, lv)
 
 class LUKSTest(unittest.TestCase):
@@ -192,21 +204,24 @@ class FilesystemTest(unittest.TestCase):
         fs_state.fill_with_garbage(int(new_size*0.8))
         fs_state.set_state()
 
-        #resize it
+        #resize it normally
         fs.resize(new_size)
         self.assertEquals(fs.size, new_size) 
         fs_state.check_unmodified()
 
+        #resize it to a strange size
         fs.resize(strange_size)
         self.assertAlmostEqual(fs.size, strange_size, delta=fs.resize_granularity)
         self.assertLessEqual(fs.size, strange_size) 
         fs_state.check_unmodified()
 
+        #resize it to a strange size, rounding up
         fs.resize(strange_size, round_up=True)
         self.assertAlmostEqual(fs.size, strange_size, delta=fs.resize_granularity)
         self.assertGreaterEqual(fs.size, strange_size) 
         fs_state.check_unmodified()
 
+        #try to resize exactly to a incompatible size
         with self.assertRaises(blockdevice.Resizeable.WrongSize):
             fs.resize(strange_size, approximate=False)
         fs_state.check_unmodified()
