@@ -324,7 +324,7 @@ def devicemapper_info(device_or_path):
 class LsblkNode(object):
     def __init__(self, name, major, minor, size, ro, type, mountpoint, parent=None):
         assert mountpoint!='' #if it's not mounted, should be None
-        assert type in ('disk', 'part', 'lvm', 'crypt', None)
+        assert type in ('disk', 'part', 'lvm', 'crypt', 'loop', None)
         self.children= []
         self.name= name
         self.major, self.minor= int(major), int(minor)
