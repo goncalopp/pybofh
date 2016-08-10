@@ -43,7 +43,9 @@ class NotReady(Exception):
 
 class Resizeable(object):
     __metaclass__=ABCMeta
-    class WrongSize(Exception):
+    class ResizeError(Exception):
+        pass
+    class WrongSize(ResizeError):
         '''raised when asked to resize someting to a impossible size'''
         pass
 
@@ -79,7 +81,7 @@ class Resizeable(object):
         assert self.size == byte_size
 
     @abstractmethod
-    def _resize(self, byte_size, minimum, maximum, interactive):
+    def _resize(self, byte_size, minimum, maximum, interactive, **kwargs):
         pass
 
 
@@ -217,6 +219,13 @@ class BaseBlockDevice( Resizeable ):
             if k(self):
                 return v(self)
         return None #data type not recognized
+
+    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True, round_up=False, **kwargs ):
+        '''The no_data argument is needed to resize a blockdevice, to make sure the user knows the data won't be resized along with it'''
+        dont_resize_data_arg= 'no_data'
+        if not kwargs.get(dont_resize_data_arg, False):
+            raise Resizeable.ResizeError("DATA LOSS WARNING! Resizing a blockdevice doesn't resize its data! If you know what you're doing, provide {}=True argument to resize()".format(dont_resize_data_arg))
+        Resizeable.resize(self, byte_size, relative, minimum, maximum, interactive, approximate, round_up)
 
 class BlockDevice(BaseBlockDevice):
     @property
