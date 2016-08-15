@@ -4,6 +4,7 @@ from pybofh.misc import file_type
 import subprocess
 import os
 import os.path
+import weakref
 from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import partial
 import re
@@ -38,6 +39,12 @@ def register_data_class( match_obj, cls, priority=False ):
     pos= 0 if priority else len(data_classes)
     data_classes.insert(pos, tup)
  
+def get_data_class_for(blockdevice):
+    for k,v in data_classes:
+        if k(blockdevice):
+            return v
+    return None #data type not recognized
+
 class NotReady(Exception):
     pass
 
@@ -53,6 +60,15 @@ class Resizeable(object):
     def size(self):
         '''returns the size of this, in bytes'''
         pass
+
+    def _round_to_granularity(self, n, round_up=True):
+        gr= self.resize_granularity
+        exact= n % gr == 0
+        divs= int(n / self.resize_granularity)
+        if round_up and not exact:
+            divs+=1
+        rec= divs * gr
+        return rec
 
     def _process_resize_size(self, byte_size=None, relative=False, approximate=True, round_up=False):
         if relative:
@@ -79,11 +95,11 @@ class Resizeable(object):
         byte_size= self._process_resize_size(byte_size, relative, approximate, round_up)
         self._resize(byte_size, minimum, maximum, interactive, **kwargs)
         assert self.size == byte_size
+        return byte_size
 
     @abstractmethod
     def _resize(self, byte_size, minimum, maximum, interactive, **kwargs):
         pass
-
 
     @abstractproperty
     def resize_granularity(self):
@@ -132,7 +148,7 @@ class Openable(object):
     def __exit__( self, e_type, e_value, e_trc ):
         self.close()
 
-    def _on_open(data, true_open):
+    def _on_open(self, data, true_open):
         '''Callback executed after a open.
         Data is whatever is returned by _open(), or None if true_open==True.
         true_open indicates whether _open was actually called'''
@@ -183,6 +199,32 @@ class Openable(object):
             self.was_fake_opened= False
         self._on_close(true_close)
 
+    def __del__(self):
+        if self.was_opened:
+            #TODO: log warning
+            pass
+
+class Parametrizable(object):
+    '''Represents an object that accepts parameters - key-value pairs that change
+    class behaviour'''
+    __metaclass__=ABCMeta
+    def __init__(self, **kwargs):
+        self._params= kwargs
+    
+    def set_params(self, **kwargs):
+        in_params= set(kwargs.keys())
+        accepted_keys= set(kwargs.keys()) and set(self.accepted_params)
+        rejected_keys= in_params - accepted_keys 
+        accepted= {k: kwargs[k] for k in accepted_keys}
+        self._params.update(accepted)
+
+    @abstractproperty
+    def accepted_params(self):
+        '''returns a iterable of param keys accepted by this class'''
+        raise NotImplementedError
+
+
+
 class BaseBlockDevice( Resizeable ):
     __metaclass__=ABCMeta
     def __init__(self, device_path, skip_validation=False):
@@ -190,6 +232,8 @@ class BaseBlockDevice( Resizeable ):
             if not os.path.exists(device_path):
                 raise Exception("Blockdevice path {} does not exist".format(device_path))
         self._set_path( device_path )
+        self._last_data= None
+        self._last_data_class= None
 
     @property
     def size(self):
@@ -210,15 +254,17 @@ class BaseBlockDevice( Resizeable ):
 
     def __repr__(self):
         return "{}<{}>".format(self.__class__.__name__, self.path)
+
  
     @property
     def data(self):
         '''returns an object representing the block device data.
         This will usually be a filesystem (but also a LUKS device, etc)'''
-        for k,v in data_classes:
-            if k(self):
-                return v(self)
-        return None #data type not recognized
+        current_data_class= get_data_class_for(self)
+        if current_data_class != self._last_data_class:
+            self._last_data_class= current_data_class
+            self._last_data= current_data_class(self)
+        return self._last_data
 
     def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True, round_up=False, **kwargs ):
         '''The no_data argument is needed to resize a blockdevice, to make sure the user knows the data won't be resized along with it'''
@@ -246,42 +292,60 @@ class Data(Resizeable):
         if not isinstance(blockdevice, BaseBlockDevice):
             raise Exception("You tried to initialize a new Data object without providing a parent block device")
         self.blockdevice= blockdevice
+    
+    def __repr__(self):
+        return "{} data".format(self.__class__.__name__)
 
 class OuterLayer(Data):
     '''A outer layer on a layered block device.
     Example: the encrypted part of a LUKS device
-    This acts as a context manager'''
+    Resizing a OuterLayer also resizes the corresponding InnerLayer'''
     __metaclass__=ABCMeta
+
+    def __init__(self, blockdevice, **kwargs):
+        Data.__init__(self, blockdevice)
+        ilc= self._inner_layer_class
+        self._inner= ilc(self, **kwargs)
+        try:
+            assert self.size == self.blockdevice.size #be careful if you need to remove this, it's an unwritten assumption throughout layer code
+            #this assertion is repeated on InnerLayer._on_open, in case NotReady is raised
+        except NotReady:
+            pass
     
     @property
     def inner(self):
-        '''returns the InnerLayer. 
-        This is a convenience property to call get_inner without arguments''' 
-        return self.get_inner()
-
-    def get_inner(self, **kwargs):
-        cls= self._inner_layer_class
-        return cls(self, **kwargs)
+        '''returns the InnerLayer.''' 
+        return self._inner
 
     @property
     def overhead(self):
-        oh= self.size - self.get_inner().size
-        assert oh>=0
+        oh= self.size - self.inner.size
+        assert oh >= 0
+        assert oh < 16 * 2**20 #16MB, just a sanity check, may need to be raised
         return oh   
 
     @abstractproperty
     def _inner_layer_class(self):
         raise NotImplementedError
 
-class InnerLayer(BlockDevice, Openable):
+class InnerLayer(BaseBlockDevice, Openable):
     '''A inner layer on a layered block device.
-    Example: the decrypted part of a LUKS device.''' 
+    Example: the decrypted part of a LUKS device.
+    This is Openable.
+    Resizing a InnerLayer also resizes the corresponding OuterLayer''' 
     __metaclass__=ABCMeta
 
     def __init__(self, outer_layer, **kwargs):
-        self.outer= outer_layer
-        BlockDevice.__init__(self, None, skip_validation=True)
+        BaseBlockDevice.__init__(self, None, skip_validation=True)
         Openable.__init__(self, **kwargs)
+        self._outer= weakref.ref(outer_layer)  #avoid GC cyclic reference for __del__, see http://eli.thegreenplace.net/2009/06/12/safely-using-destructors-in-python/
+
+    @property
+    def outer(self):
+        o= self._outer() # get from weakref
+        if o is None:
+            raise Exception("The outer layer has been GC'd - did you drop all references to it?")
+        return o
 
     def _externally_open_data(self):
         root= lsblk()
@@ -298,6 +362,9 @@ class InnerLayer(BlockDevice, Openable):
     def _on_open( self, path, true_open ):
         assert os.path.exists(path)
         self._set_path( path )
+        assert self.size == self.outer.size - self.outer.overhead #note overhead is calculated as the difference between them right now
+        assert self.outer.size == self.outer.blockdevice.size #be careful if you need to remove this, it's an unwritten assumption throughout layer code
+        #this assertion is repeated on OuterLayer.__init__, to TRY to catch errors sooner
 
     def _on_close(self, true_close):
         self._set_path( None )
