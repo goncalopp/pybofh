@@ -220,13 +220,13 @@ class FilesystemTest(unittest.TestCase):
         #resize it to a strange size
         fs.resize(strange_size)
         self.assertAlmostEqual(fs.size, strange_size, delta=fs.resize_granularity)
-        self.assertLessEqual(fs.size, strange_size) 
+        self.assertGreaterEqual(fs.size, strange_size) 
         fs_state.check_unmodified()
 
-        #resize it to a strange size, rounding up
-        fs.resize(strange_size, round_up=True)
+        #resize it to a strange size, rounding down
+        fs.resize(strange_size, round_up=False)
         self.assertAlmostEqual(fs.size, strange_size, delta=fs.resize_granularity)
-        self.assertGreaterEqual(fs.size, strange_size) 
+        self.assertLessEqual(fs.size, strange_size) 
         fs_state.check_unmodified()
 
         #try to resize exactly to a incompatible size

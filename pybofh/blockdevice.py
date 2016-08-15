@@ -70,7 +70,7 @@ class Resizeable(object):
         rec= divs * gr
         return rec
 
-    def _process_resize_size(self, byte_size=None, relative=False, approximate=True, round_up=False):
+    def _process_resize_size(self, byte_size=None, relative=False, approximate=True, round_up=True):
         if relative:
             byte_size+= self.size
         if byte_size:
@@ -85,12 +85,12 @@ class Resizeable(object):
         assert byte_size % self.resize_granularity == 0
         return byte_size
 
-    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True, round_up=False, **kwargs ):
+    def resize(self, byte_size=None, relative=False, minimum=False, maximum=False, interactive=True, approximate=True, round_up=True, **kwargs ):
         '''byte_size is the new size of the filesytem.
         if relative==True, the new size will be current_size+byte_size.
         if minimum==True, will resize to the minimum size possible.
         if maximum==True, will resize to the maximum size possible.
-        if approximate==True, will automatically round DOWN according to resize_granularity'''
+        if approximate==True, will automatically round UP according to resize_granularity'''
         assert int(bool(byte_size)) + int(minimum) + int(maximum) == 1
         byte_size= self._process_resize_size(byte_size, relative, approximate, round_up)
         self._resize(byte_size, minimum, maximum, interactive, **kwargs)
