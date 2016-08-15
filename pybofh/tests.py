@@ -1,15 +1,17 @@
 import os
+import os.path
 import unittest
 import pybofh
 from pybofh import lvm, encryption, blockdevice, filesystem, mount
 
-TEST_BLOCKDEVICE= '/dev/vgpersonal/lv_as_pv'
+TEST_BLOCKDEVICE= '/dev/vgpersonal/test_lv'
 TEST_MOUNTPOINT= '/media/tmp'
 TEST_VG= 'test_vg_pybofh'
 TEST_LV= 'test_lv_pybofh'
 TEST_LV_SIZE= 500*1024*1024 #500MiB
 LUKS_KEY= '3r9b4g3v9no3'
 LUKS_KEYFILE= 'luks_test_keyfile'
+FILESYSTEM_FILL_RATE=0.8 #how much to fill up a filesystem of data for integrity tests
 
 def hash_file(file_path, hash_cls=None):
     if hash_cls is None:
@@ -51,12 +53,12 @@ def hash_dir(dir_path, base_path=None, flat=True):
         return hash_dict
 
 class FilesystemState(object):
-    def __init__(self, blockdevice, flat_hash=False):
-        self.bd= blockdevice
+    def __init__(self, blockdevice_path, flat_hash=False):
+        self.bd_path= blockdevice_path
         self.flat_hash= flat_hash
 
     def get_hash(self):
-        with mount.Mounted(self.bd.path, TEST_MOUNTPOINT) as mnt:
+        with mount.Mounted(self.bd_path, TEST_MOUNTPOINT) as mnt:
             h= hash_dir(mnt, flat=self.flat_hash)
         return h
 
@@ -91,7 +93,7 @@ class FilesystemState(object):
         import random
         import string
         total_count_size= 0
-        with mount.Mounted(self.bd.path, TEST_MOUNTPOINT) as mnt:
+        with mount.Mounted(self.bd_path, TEST_MOUNTPOINT) as mnt:
             while total_count_size is None or total_count_size<total_size:
                 file_size= random.randint(min_file_size, max_file_size)
                 if total_size is not None:
@@ -110,13 +112,13 @@ class FilesystemState(object):
 
 class LVMTest(unittest.TestCase):
     @staticmethod
-    def _create_stack(testcase):
+    def _create_stack(testcase, size=TEST_LV_SIZE):
         pv= lvm.PV(TEST_BLOCKDEVICE)
         pv.create()
         pv= blockdevice.BlockDevice(TEST_BLOCKDEVICE).data
         testcase.assertIsInstance(pv, lvm.PV)
         vg= pv.createVG(TEST_VG)
-        lv1= vg.createLV(TEST_LV, TEST_LV_SIZE) 
+        lv1= vg.createLV(TEST_LV, size) 
         return pv, vg, lv1
 
     @staticmethod
@@ -142,12 +144,18 @@ class LVMTest(unittest.TestCase):
         self._delete_stack(self, pv, vg, lv)
 
 class LUKSTest(unittest.TestCase):
-    def _create(testcase, format=True):
+    @staticmethod
+    def _create_on_bd(testcase, bd, format=True):
         if format:
-            encryption.create_encrypted(TEST_BLOCKDEVICE, key_file=LUKS_KEYFILE, interactive=False)
-        bd= blockdevice.BlockDevice(TEST_BLOCKDEVICE)
+            encryption.create_encrypted(bd.path, key_file=LUKS_KEYFILE, interactive=False)
         encrypted= bd.data
-        decrypted= encrypted.get_inner(key_file=LUKS_KEYFILE)
+        decrypted= encrypted.inner
+        decrypted.set_params(key_file=LUKS_KEYFILE)
+        return encrypted, decrypted
+
+    def _create(testcase, format=True):
+        bd= blockdevice.BlockDevice(TEST_BLOCKDEVICE)
+        encrypted, decrypted= LUKSTest._create_on_bd(testcase, bd, format)
         return bd, encrypted, decrypted
 
     def _check_accessable(testcase, decrypted):
@@ -200,8 +208,8 @@ class FilesystemTest(unittest.TestCase):
         self.assertLess(fs.size, 1*1024*1024*1024*1024) #1TB
         #fill fs with random data
         debug=False
-        fs_state= FilesystemState(bd, flat_hash=not debug)
-        fs_state.fill_with_garbage(int(new_size*0.8))
+        fs_state= FilesystemState(bd.path, flat_hash=not debug)
+        fs_state.fill_with_garbage(int(new_size*FILESYSTEM_FILL_RATE))
         fs_state.set_state()
 
         #resize it normally
@@ -225,6 +233,18 @@ class FilesystemTest(unittest.TestCase):
         with self.assertRaises(blockdevice.Resizeable.WrongSize):
             fs.resize(strange_size, approximate=False)
         fs_state.check_unmodified()
+
+class BlockDeviceTest(unittest.TestCase):
+    def test_blockdevice_resize(self):
+        bd= blockdevice.BlockDevice( TEST_BLOCKDEVICE ) 
+        old_size= bd.size
+        new_size= bd.size/2
+        with self.assertRaises(blockdevice.Resizeable.ResizeError):
+            #should fail without the no_data argument
+            bd.resize( old_size/2 )
+        with self.assertRaises(NotImplementedError):
+            #should not be implemented for the non-specific blockdevice
+            bd.resize( old_size/2, no_data=True )
 
 
 if __name__ == '__main__':
