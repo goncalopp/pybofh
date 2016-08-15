@@ -1,6 +1,6 @@
 # -*- encoding: utf-8 -*-
 
-from pybofh.misc import file_type
+from pybofh.misc import file_type, lcm
 import subprocess
 import os
 import os.path
@@ -378,6 +378,139 @@ def get_device_path(device_or_path):
         path= device_or_path
     assert os.path.exists(path)
     return path
+
+class BlockDeviceStack(Resizeable, Openable):
+    '''Represents a stack of blockdevices / Data.
+    Example: Ext4 on top of LUKS on top of DRBD on top of a LV'''
+    def __init__(self, outermost_layer, **kwargs):
+        Resizeable.__init__(self)
+        Openable.__init__(self, **kwargs)
+        if isinstance(outermost_layer, InnerLayer):
+            outermost_layer= self.get_outer(outermost_layer).blockdevice
+        if isinstance(outermost_layer, Data):
+            outermost_layer= outermost_layer.blockdevice
+        if not isinstance(outermost_layer, BaseBlockDevice):
+            # could be a path
+            outermost_layer= BlockDevice(outermost_layer) 
+        self._outermost= outermost_layer
+        self._layers= None
+
+    def _open(self, **kwargs):
+        open_args= kwargs
+        return self._compute_and_open_layers(open_args)
+
+    def _close(self):
+        for layer in reversed(self.layers[1:]):
+            #process in innermost to outermost order, ignore innermost layer
+            layer.close()
+
+    def _on_open(self, layers, true_open):
+        self._layers= layers
+
+    def _on_close(self, true_close):
+        self._layers= None
+
+    def _externally_open_data(self):
+        return None # this can never be opened externally
+
+    @property
+    def layers(self):  # could be a path
+        '''Returns the layers of this stack. This is simply a iterable of 
+        BaseBlockDevice, ordered from outermost to innermost'''
+        if self._layers is None:
+            raise NotReady("BlockDeviceStack wasn't opened yet")
+        return self._layers
+
+    def _compute_and_open_layers(self, open_args):
+        layers=[] #outermost to innermost order
+        current_layer= self._outermost
+        while current_layer is not None:
+            layers.append(current_layer)
+            current_layer= self._next_layer(current_layer, open_args)
+        return layers
+ 
+    @staticmethod
+    def _next_layer(layer, open_args):
+        assert isinstance(layer, BaseBlockDevice)
+        if layer.data is None:
+            return None
+        if not isinstance(layer.data, OuterLayer):
+            return None
+        outer= layer.data
+        inner= outer.inner
+        inner.open(**open_args)
+        return inner
+
+    @property
+    def outermost(self):
+        return self._outermost
+
+    @property
+    def innermost(self):
+        return self.layers[-1]
+
+    @property
+    def resize_granularity(self):
+        granularities= [l.resize_granularity for l in self.layers]
+        return lcm(*granularities)
+
+    @property
+    def size(self):
+        return self.outermost.size
+
+    @property
+    def total_overhead(self):
+        return sum(l.data.overhead for l in self.layers[:-1])
+
+    def _resize(self, byte_size, minimum, maximum, interactive ):
+        if maximum or minimum:
+            raise NotImplementedError("maximum or minimum options not available for BlockDeviceStack")
+        granularity= self.resize_granularity
+        expansion= True if maximum else False if minimum else byte_size>=self.outermost.size
+        target_size= byte_size
+        common_args= {"minimum": minimum, "maximum": maximum, "interactive": interactive}
+        if expansion:
+            common_args["round_up"]= False
+            #resize outermost blockdevice...
+            self.outermost.resize(byte_size=target_size, no_data=True, **common_args)
+            for layer in self.layers[:-1]:
+                #and all the data (Outerlayer) of each layer, which also resizes the InnerLayer (next layer)
+                inner_size= layer.data.inner.size
+                assert layer.data.inner.size == layer.data.size - layer.data.overhead
+                layer.data.resize(byte_size=target_size, **common_args)
+                assert layer.data.inner.size > inner_size #make sure the OuterLayer resized the InnerLayer
+                assert layer.data.inner.size == layer.data.size - layer.data.overhead
+                target_size-= max(layer.data.overhead, granularity)
+            #finally, resize the innermost layer data (which is not an OuterLayer)
+            self.innermost.data.resize(byte_size=self.innermost.size, **common_args)
+        else: #reduction
+            common_args["round_up"]= True
+            target_size= target_size - self.total_overhead
+            #resize innermost data...
+            target_size= self.innermost.data.resize(target_size, **common_args)
+            for layer in list(reversed(self.layers))[:-1]:
+                #and all blockdevices(InnerLayer), from the innermost to outermost, which also resizes the OuterLayer
+                outer_size= layer.outer.size
+                assert layer.size == layer.outer.size - layer.outer.overhead
+                layer.resize(target_size, no_data=True, **common_args)
+                assert layer.outer.size < outer_size #make sure the Innerlayer resized the OuterLayer
+                assert layer.size == layer.outer.size - layer.outer.overhead
+                target_size= layer.size + layer.outer.overhead
+            #finally, resize the outermost layer (which is not an InnerLayer)
+            self.outermost.resize(self.outermost.data.size, no_data=True, **common_args)
+
+    def __repr__(self):
+        return "{}<{}>".format(self.__class__.__name__, self.outermost.path)
+
+    def __str__(self):
+        LAYER_SEP="\n  "
+        def layer_to_str(l):
+            bd_s= "{:<40}, size={}".format(l, l.size)
+            data_s= "{:<40} size={}".format(l.data, l.data.size if l.data!=None else "?")
+            return LAYER_SEP.join((data_s, bd_s))
+        substrings= map(layer_to_str, reversed(self.layers))
+        header= repr(self) + " with layers:"
+        return LAYER_SEP.join([header] + substrings)
 
 
 def devicemapper_info(device_or_path):

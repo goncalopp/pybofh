@@ -30,3 +30,21 @@ def rsplit( string, delimiter=' ' ):
 
 def file_type( path ):
     return subprocess.check_output( ["file", "--special", "--dereference", path])
+
+def gcd(a,b):
+    '''Greatest common denominator'''
+    a,b= min(a,b), max(a,b)
+    c= b%a
+    if c==0:
+        return a
+    else:
+        return gcd(a, c)
+
+def lcm(*args):
+    '''Least common multiple'''
+    if len(args)>2:
+        return lcm(lcm(args[0], args[1]), *args[2:])
+    a,b= args
+    result= abs(a*b)/gcd(a,b)
+    assert result <= a * b
+    return result

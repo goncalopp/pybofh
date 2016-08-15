@@ -247,7 +247,66 @@ class BlockDeviceTest(unittest.TestCase):
             bd.resize( old_size/2, no_data=True )
 
 
+class BlockDeviceStackTest(unittest.TestCase):
+    DEFAULT_FILESYSTEM= filesystem.Ext3
+    @staticmethod
+    def _create_stack(testcase, size=TEST_LV_SIZE):
+        fs_cls= BlockDeviceStackTest.DEFAULT_FILESYSTEM
+        pv, vg, lv= LVMTest._create_stack(testcase, size=size)
+        encrypted, decrypted= LUKSTest._create_on_bd(testcase, lv)
+        with decrypted:
+            fs_cls.create(decrypted.path)
+        stack= blockdevice.BlockDeviceStack(lv, key_file=LUKS_KEYFILE)
+        return stack, pv, vg, lv, decrypted
+
+    @staticmethod
+    def _delete_stack(testcase, stack, pv, vg, lv, decrypted):
+        LVMTest._delete_stack(testcase, pv, vg, lv)
+ 
+    def test_stack_basics(self):
+        stack, pv, vg, lv, decrypted= BlockDeviceStackTest._create_stack(self)
+        old_size= lv.size
+        new_size= old_size / 2
+        with stack as stack:
+            self.assertIsInstance(stack.innermost.data, BlockDeviceStackTest.DEFAULT_FILESYSTEM)
+            self.assertEquals(stack.outermost, lv)
+            self.assertEquals(list(stack.layers), [lv,decrypted])
+        BlockDeviceStackTest._delete_stack(self, stack, pv, vg, lv, decrypted)
+
+    @staticmethod
+    def _test_stack_resize(testcase, old_size=TEST_LV_SIZE, new_size=TEST_LV_SIZE/2):
+        stack, pv, vg, lv, decrypted= BlockDeviceStackTest._create_stack(testcase, size=old_size)
+        with stack as stack:
+            fs_state= FilesystemState(stack.innermost.path)
+            fs_state.fill_with_garbage(int(min(new_size,old_size)*FILESYSTEM_FILL_RATE))
+            fs_state.set_state()
+
+            stack.resize(new_size)
+
+            testcase.assertAlmostEquals(stack.size, new_size, delta=stack.resize_granularity) 
+            last_layer_size=float('inf')
+            for layer in stack.layers:
+                testcase.assertAlmostEquals(layer.size, new_size, delta=stack.total_overhead) 
+                testcase.assertAlmostEquals(layer.data.size, new_size, delta=stack.total_overhead) 
+                testcase.assertLessEqual(layer.size, last_layer_size)
+                testcase.assertLessEqual(layer.data.size, layer.size)
+                last_layer_size= layer.data.size
+            fs_state.check_unmodified()
+        BlockDeviceStackTest._delete_stack(testcase, stack, pv, vg, lv, decrypted)
+
+    def test_stack_resize_down(self):
+        BlockDeviceStackTest._test_stack_resize(self, TEST_LV_SIZE, TEST_LV_SIZE/2)
+
+    def test_stack_resize_up(self):
+        import ipdb; ipdb.set_trace()
+        BlockDeviceStackTest._test_stack_resize(self, TEST_LV_SIZE/2, TEST_LV_SIZE)
+
+
+
+
 if __name__ == '__main__':
+    assert os.path.exists(TEST_BLOCKDEVICE)
+    assert os.path.exists(TEST_MOUNTPOINT)
     with open(LUKS_KEYFILE, 'w') as f:
         f.write(LUKS_KEY)
     unittest.main()
