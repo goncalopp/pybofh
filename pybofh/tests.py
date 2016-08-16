@@ -274,9 +274,10 @@ class BlockDeviceStackTest(unittest.TestCase):
         BlockDeviceStackTest._delete_stack(self, stack, pv, vg, lv, decrypted)
 
     @staticmethod
-    def _test_stack_resize(testcase, old_size=TEST_LV_SIZE, new_size=TEST_LV_SIZE/2):
+    def _test_stack_resize(testcase, old_size, new_size, pre_sizes, post_sizes):
         stack, pv, vg, lv, decrypted= BlockDeviceStackTest._create_stack(testcase, size=old_size)
         with stack as stack:
+            testcase.assertEquals(stack.layer_and_data_sizes(), pre_sizes)
             fs_state= FilesystemState(stack.innermost.path)
             fs_state.fill_with_garbage(int(min(new_size,old_size)*FILESYSTEM_FILL_RATE))
             fs_state.set_state()
@@ -292,16 +293,18 @@ class BlockDeviceStackTest(unittest.TestCase):
                 testcase.assertLessEqual(layer.data.size, layer.size)
                 last_layer_size= layer.data.size
             fs_state.check_unmodified()
+            testcase.assertEquals(stack.layer_and_data_sizes(), post_sizes)
         BlockDeviceStackTest._delete_stack(testcase, stack, pv, vg, lv, decrypted)
 
     def test_stack_resize_down(self):
-        BlockDeviceStackTest._test_stack_resize(self, TEST_LV_SIZE, TEST_LV_SIZE/2)
+        pre_sizes= [524288000, 524288000, 522190848, 522190848]
+        post_sizes= [264241152, 264241152, 262144000, 262144000]
+        BlockDeviceStackTest._test_stack_resize(self, TEST_LV_SIZE, TEST_LV_SIZE/2, pre_sizes, post_sizes)
 
     def test_stack_resize_up(self):
-        import ipdb; ipdb.set_trace()
-        BlockDeviceStackTest._test_stack_resize(self, TEST_LV_SIZE/2, TEST_LV_SIZE)
-
-
+        pre_sizes= [264241152, 264241152, 262144000, 262144000]
+        post_sizes= [524288000, 524288000, 522190848, 522190848]
+        BlockDeviceStackTest._test_stack_resize(self, TEST_LV_SIZE/2, TEST_LV_SIZE, pre_sizes, post_sizes)
 
 
 if __name__ == '__main__':

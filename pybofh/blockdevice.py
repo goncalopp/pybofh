@@ -250,6 +250,8 @@ class BaseBlockDevice( Resizeable ):
         '''The path to the file representing the block device'''
         if self._path is None:
             raise NotReady("Block device is not ready (path not set)")
+        if not os.path.exists(self._path):
+            raise NotReady("Block device path doesn't exist")
         return self._path
 
     def __repr__(self):
@@ -307,11 +309,15 @@ class OuterLayer(Data):
         ilc= self._inner_layer_class
         self._inner= ilc(self, **kwargs)
         try:
-            assert self.size == self.blockdevice.size #be careful if you need to remove this, it's an unwritten assumption throughout layer code
-            #this assertion is repeated on InnerLayer._on_open, in case NotReady is raised
+            #this is repeated on InnerLayer._on_open, in case NotReady is raised
+            self._sanity_check()
         except NotReady:
             pass
     
+    def _sanity_check(self):
+        assert self.size == self.blockdevice.size #be careful if you need to remove this, it's an unwritten assumption throughout layer code
+        assert self.inner.size == self.size - self.overhead #note overhead is calculated as the difference between them right now
+
     @property
     def inner(self):
         '''returns the InnerLayer.''' 
@@ -362,9 +368,7 @@ class InnerLayer(BaseBlockDevice, Openable):
     def _on_open( self, path, true_open ):
         assert os.path.exists(path)
         self._set_path( path )
-        assert self.size == self.outer.size - self.outer.overhead #note overhead is calculated as the difference between them right now
-        assert self.outer.size == self.outer.blockdevice.size #be careful if you need to remove this, it's an unwritten assumption throughout layer code
-        #this assertion is repeated on OuterLayer.__init__, to TRY to catch errors sooner
+        self.outer._sanity_check()
 
     def _on_close(self, true_close):
         self._set_path( None )
@@ -406,6 +410,7 @@ class BlockDeviceStack(Resizeable, Openable):
 
     def _on_open(self, layers, true_open):
         self._layers= layers
+        self._sanity_check()
 
     def _on_close(self, true_close):
         self._layers= None
@@ -413,6 +418,11 @@ class BlockDeviceStack(Resizeable, Openable):
     def _externally_open_data(self):
         return None # this can never be opened externally
 
+    def _sanity_check(self):
+        for layer in self.layers[:-1]:
+            layer.data._sanity_check()
+        assert self.innermost.size == self.innermost.data.size
+        
     @property
     def layers(self):  # could be a path
         '''Returns the layers of this stack. This is simply a iterable of 
@@ -498,6 +508,15 @@ class BlockDeviceStack(Resizeable, Openable):
                 target_size= layer.size + layer.outer.overhead
             #finally, resize the outermost layer (which is not an InnerLayer)
             self.outermost.resize(self.outermost.data.size, no_data=True, **common_args)
+        self._sanity_check()
+
+    def layer_and_data_sizes(self):
+        sizes=[]
+        for layer in self.layers:
+            sizes.append(layer.size)
+            sizes.append(layer.data.size)
+        return sizes
+
 
     def __repr__(self):
         return "{}<{}>".format(self.__class__.__name__, self.outermost.path)
