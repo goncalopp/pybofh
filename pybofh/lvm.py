@@ -74,7 +74,7 @@ class LV(blockdevice.BaseBlockDevice):
         return os.path.join(self.vg.path, self.name)
     
     def __repr__(self):
-        return "{}<{},{}>".format(self.__class__.__name__, self.vg, self.name)
+        return "{}<{}>".format(self.__class__.__name__, self.name)
 
     def remove( self, *args, **kwargs ):
         removeLV( self.vg.name, self.name, *args, **kwargs)

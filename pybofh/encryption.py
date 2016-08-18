@@ -1,12 +1,15 @@
 import subprocess
-from cli import python_cli
-from site_specific import decrypted_path
-import blockdevice
 import os, os.path
 import time
+from cli import python_cli
+from pybofh.site_specific import decrypted_path
+from pybofh.my_logging import get_logger
+from pybofh import blockdevice
 
 LUKS_SECTOR_SIZE= 512 #this seems hardcoded into luks, so hopefully it's safe to keep it there
 LUKS_HEADER_SIZE= 2 * 2**20 # this is asserted by the code when opening a Decrypted
+
+log = get_logger(__name__)
 
 class Encrypted(blockdevice.OuterLayer, blockdevice.Parametrizable):
     def __init__(self, bd, **kwargs):
@@ -73,7 +76,7 @@ class Decrypted(blockdevice.InnerLayer, blockdevice.Parametrizable):
         assert (outer_size - inner_size) == LUKS_HEADER_SIZE
 
 def create_encrypted( device, key_file=None, interactive=True ):
-    print "formatting new encrypted disk on {device}".format(**locals())
+    log.info("formatting new encrypted disk on {}".format(device))
     assert os.path.exists(device) 
     command= ['/sbin/cryptsetup', 'luksFormat']
     if key_file:
@@ -85,7 +88,7 @@ def create_encrypted( device, key_file=None, interactive=True ):
 
 def open_encrypted( device, key_file=None ):
     '''decrypt and return path to decrypted disk device'''
-    print "opening encrypted disk {device}".format(**locals())
+    log.info("opening encrypted disk {}".format(device))
     name= luks_name( device )
     u_path= luks_path( name )
     if os.path.exists(u_path):
@@ -99,7 +102,7 @@ def open_encrypted( device, key_file=None ):
     return u_path
 
 def close_encrypted( path ):
-    print "closing encrypted disk {path}".format(**locals())
+    log.info("closing encrypted disk {}".format(path))
     command= '/sbin/cryptsetup luksClose {0}'.format( path )
     subprocess.check_call( command, shell=True )
 

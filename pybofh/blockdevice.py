@@ -1,6 +1,7 @@
 # -*- encoding: utf-8 -*-
 
 from pybofh.misc import file_type, lcm
+from pybofh.my_logging import get_logger
 import subprocess
 import os
 import os.path
@@ -10,6 +11,8 @@ from functools import partial
 import re
 
 DM_DIR= '/dev/mapper/'
+
+log = get_logger(__name__)
 
 #this is a lit of 2-tuples that is used for other modules to be able to register Data subclasses.
 #each key (first tuple element) is a function that takes the block device instance and returns True iff the data of that block device can
@@ -93,6 +96,7 @@ class Resizeable(object):
         if approximate==True, will automatically round UP according to resize_granularity'''
         assert int(bool(byte_size)) + int(minimum) + int(maximum) == 1
         byte_size= self._process_resize_size(byte_size, relative, approximate, round_up)
+        log.info("Resizing {} from {} to {} bytes".format(self, self.size, byte_size))
         self._resize(byte_size, minimum, maximum, interactive, **kwargs)
         assert self.size == byte_size
         return byte_size
@@ -179,6 +183,7 @@ class Openable(object):
             raise self.AlreadyOpen("{} was opened before".format(self))
         if not true_open and self.exclusive:
             raise self.AlreadyOpen("{} is already opened (by an external mechanism)")
+        log.info("Opening {} (fake_open={})".format(self, not true_open))
         if true_open:
             result= self._open(**open_args)
             self.was_opened= True
@@ -190,6 +195,7 @@ class Openable(object):
 
     def close( self ):
         true_close= self.was_opened
+        log.info("Closing {} (fake_close={})".format(self, not true_close))
         if true_close:
             self._close()
             self.was_opened= False
@@ -201,8 +207,7 @@ class Openable(object):
 
     def __del__(self):
         if self.was_opened:
-            #TODO: log warning
-            pass
+            log.warning("Deleting object without closing: {}".format(self))
 
 class Parametrizable(object):
     '''Represents an object that accepts parameters - key-value pairs that change
@@ -222,8 +227,6 @@ class Parametrizable(object):
     def accepted_params(self):
         '''returns a iterable of param keys accepted by this class'''
         raise NotImplementedError
-
-
 
 class BaseBlockDevice( Resizeable ):
     __metaclass__=ABCMeta
@@ -255,7 +258,11 @@ class BaseBlockDevice( Resizeable ):
         return self._path
 
     def __repr__(self):
-        return "{}<{}>".format(self.__class__.__name__, self.path)
+        try:
+            path= self.path
+        except NotReady:
+            path= None
+        return "{}<{}>".format(self.__class__.__name__, path)
 
  
     @property
@@ -527,9 +534,12 @@ class BlockDeviceStack(Resizeable, Openable):
             bd_s= "{:<40}, size={}".format(l, l.size)
             data_s= "{:<40} size={}".format(l.data, l.data.size if l.data!=None else "?")
             return LAYER_SEP.join((data_s, bd_s))
-        substrings= map(layer_to_str, reversed(self.layers))
-        header= repr(self) + " with layers:"
-        return LAYER_SEP.join([header] + substrings)
+        try:
+            substrings= map(layer_to_str, reversed(self.layers))
+            header= repr(self) + " with layers:"
+            return LAYER_SEP.join([header] + substrings)
+        except NotReady:
+            return self.__repr__()
 
 
 def devicemapper_info(device_or_path):
