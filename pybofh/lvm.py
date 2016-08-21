@@ -148,21 +148,18 @@ def removePV(device):
     command="/sbin/pvremove {device}".format(**locals())
     subprocess.check_call(command, shell=True)
 
-def _parse_vgdisplay():
-    EXPECTED_KEYS = ['Cur PV', 'PE Size', 'VG Status', 'Format', 'VG Access', 
-        'Alloc PE / Size', 'VG Size', 'Free  PE / Size', 'Open LV', 'Max PV', 
-        'Metadata Sequence No', 'MAX LV', 'System ID', 'Total PE', 'VG UUID', 
-        'Metadata Areas', 'Act PV', 'VG Name', 'Cur LV']
-    is_separator_line= lambda line: '--- Volume group ---' in line
+def _parse_xxdisplay(output, expected_keys, is_separator_line, name_key, column2_start=24):
+    '''Generic parser for output of pvdisplay, vgdisplay and lvdisplay'''
     def parse_line(line):
+        print "parsing:", line
         if "System ID" in line:
             #no value data for this one? brakes assertions
             return ("System ID", None) 
         assert line.startswith("  ") 
         assert line[2]!=" " # first column
-        assert line[23]==" " # before second column
-        assert line[24]!=" " # second column
-        tup= (line[2:24].strip(), line[24:].strip())
+        assert line[column2_start-1]==" "
+        assert line[column2_start]!=" " # second column
+        tup= (line[2:column2_start].strip(), line[column2_start:].strip())
         assert len(tup[0]) > 0 and len(tup[1]) > 0
         return tup
     def convert_line_tup(tup):
@@ -174,24 +171,52 @@ def _parse_vgdisplay():
                 size= int(float(tokens[0]) * SIZE_SUFFIXES[tokens[1]])
                 tup= (tup[0], size)
         return tup
-    out= subprocess.check_output("/sbin/vgdisplay")
-    lines= out.splitlines()
+    lines= output.splitlines()
     lines= [line for line in lines if line.strip()!='']
     sep_lines_idx= [i for i,line in enumerate(lines) if is_separator_line(line)]
     sep_lines_idx.append(len(lines))
     assert len(sep_lines_idx)>=1 # TODO: what if there are no VGs?
-    vg_dicts={}
-    for vg_i in range(len(sep_lines_idx) - 1):
-        start_line= sep_lines_idx[vg_i] + 1
-        end_line= sep_lines_idx[vg_i+1] 
-        vg_lines= lines[start_line:end_line]
-        assert 10 <= len(vg_lines) <= 30
-        vg_tuples= map(parse_line, vg_lines)
-        vg_tuples2= map(convert_line_tup, vg_tuples)
-        vg_dict= dict(vg_tuples2)
-        assert set(vg_dict) >= set(EXPECTED_KEYS)
-        vg_name= vg_dict['VG Name']
-        vg_dicts[vg_name]= vg_dict
-    return vg_dicts
+    xx_dicts={}
+    for xx_i in range(len(sep_lines_idx) - 1):
+        start_line= sep_lines_idx[xx_i] + 1
+        end_line= sep_lines_idx[xx_i+1]
+        xx_lines= lines[start_line:end_line]
+        assert 8 <= len(xx_lines) <= 30
+        xx_tuples= map(parse_line, xx_lines)
+        xx_tuples2= map(convert_line_tup, xx_tuples)
+        xx_dict= dict(xx_tuples2)
+        assert set(xx_dict) >= set(expected_keys)
+        xx_name= xx_dict[name_key]
+        xx_dicts[xx_name]= xx_dict
+    return xx_dicts
+
+def _parse_pvdisplay():
+    EXPECTED_KEYS = [ 'PV Name', 'VG Name', 'PV Size', 'Allocatable',
+        'PE Size', 'Total PE', 'Free PE', 'Allocated PE', 'PV UUID']
+    is_separator_line= lambda line: '--- Physical volume ---' in line
+    out= subprocess.check_output("/sbin/pvdisplay")
+    name_key='PV Name'
+    return _parse_xxdisplay(out, EXPECTED_KEYS, is_separator_line, name_key)
+
+def _parse_vgdisplay():
+    EXPECTED_KEYS = ['Act PV', 'Alloc PE / Size', 'Cur LV', 'Cur PV',
+        'Format', 'Free  PE / Size', 'MAX LV', 'Max PV', 'Metadata Areas',
+        'Metadata Sequence No', 'Open LV', 'PE Size', 'System ID', 'Total PE',
+        'VG Access', 'VG Name', 'VG Size', 'VG Status', 'VG UUID']
+    is_separator_line= lambda line: '--- Volume group ---' in line
+    out= subprocess.check_output("/sbin/vgdisplay")
+    name_key='VG Name'
+    return _parse_xxdisplay(out, EXPECTED_KEYS, is_separator_line, name_key)
+
+
+def _parse_lvdisplay():
+    EXPECTED_KEYS = [ 'LV Path', 'LV Name', 'VG Name', 'LV UUID',
+            'LV Write Access', 'LV Creation host, time', 'LV Status',
+            '# open', 'LV Size', 'Current LE', 'Segments', 'Allocation',
+            'Read ahead sectors', '- currently set to', 'Block device']
+    is_separator_line= lambda line: '--- Logical volume ---' in line
+    out= subprocess.check_output("/sbin/lvdisplay")
+    name_key='LV Name'
+    return _parse_xxdisplay(out, EXPECTED_KEYS, is_separator_line, name_key, column2_start=25)
 
 blockdevice.register_data_class("LVM2 PV", PV)
