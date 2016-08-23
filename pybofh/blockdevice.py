@@ -531,7 +531,7 @@ class BlockDeviceStack(Resizeable, Openable):
     def __str__(self):
         LAYER_SEP="\n  "
         def layer_to_str(l):
-            bd_s= "{:<40}, size={}".format(l, l.size)
+            bd_s=   "{:<40} size={}".format(l, l.size)
             data_s= "{:<40} size={}".format(l.data, l.data.size if l.data!=None else "?")
             return LAYER_SEP.join((data_s, bd_s))
         try:
@@ -562,7 +562,7 @@ def devicemapper_info(device_or_path):
 class LsblkNode(object):
     def __init__(self, name, major, minor, size, ro, type, mountpoint, parent=None):
         assert mountpoint!='' #if it's not mounted, should be None
-        assert type in ('disk', 'part', 'lvm', 'crypt', 'loop', None)
+        assert type in ('disk', 'part', 'lvm', 'crypt', 'loop', 'raid1', None)
         self.children= []
         self.name= name
         self.major, self.minor= int(major), int(minor)

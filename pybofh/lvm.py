@@ -151,7 +151,6 @@ def removePV(device):
 def _parse_xxdisplay(output, expected_keys, is_separator_line, name_key, column2_start=24):
     '''Generic parser for output of pvdisplay, vgdisplay and lvdisplay'''
     def parse_line(line):
-        print "parsing:", line
         if "System ID" in line:
             #no value data for this one? brakes assertions
             return ("System ID", None) 

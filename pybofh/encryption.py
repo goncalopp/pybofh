@@ -1,3 +1,4 @@
+import struct
 import subprocess
 import os, os.path
 import time
@@ -7,7 +8,6 @@ from pybofh.my_logging import get_logger
 from pybofh import blockdevice
 
 LUKS_SECTOR_SIZE= 512 #this seems hardcoded into luks, so hopefully it's safe to keep it there
-LUKS_HEADER_SIZE= 2 * 2**20 # this is asserted by the code when opening a Decrypted
 
 log = get_logger(__name__)
 
@@ -22,9 +22,12 @@ class Encrypted(blockdevice.OuterLayer, blockdevice.Parametrizable):
 
     @property
     def size(self):
-        inner_size= self.inner.size #this method can't work if the LUKS device is closed
-        #potential alternative: use self.blockdevice.size when the LUKS device is closed
-        return LUKS_HEADER_SIZE + inner_size
+        try:
+            header_size= luks_data_offset(self.blockdevice.path)
+            return header_size + self.inner.size
+        except blockdevice.NotReady:
+            #there's no way to know, just return the enclosing blockdevice size
+            return self.blockdevice.size
 
     @property
     def resize_granularity(self):
@@ -73,7 +76,8 @@ class Decrypted(blockdevice.InnerLayer, blockdevice.Parametrizable):
         blockdevice.InnerLayer._on_open(self, path, true_open)
         inner_size= self.size
         outer_size= self.outer.blockdevice.size
-        assert (outer_size - inner_size) == LUKS_HEADER_SIZE
+        header_size= luks_data_offset(self.outer.blockdevice.path)
+        assert (outer_size - inner_size) == header_size
 
 def create_encrypted( device, key_file=None, interactive=True ):
     log.info("formatting new encrypted disk on {}".format(device))
@@ -125,6 +129,20 @@ def luks_path( luks_name ):
     '''Given a LUKS device name, returns its decrypted path.
     Usually /dev/mapper/NAME'''
     return '/dev/mapper/'+luks_name
+
+def luks_data_offset( blockdevice ):
+    '''Given a path to a LUKS encrypted blockdevice, detects the offset of the
+    encrypted data (in bytes) - that is, where the LUKS header "ends".
+    Info extracted from the LUKS On-Disk Format Specification Version 1.2.2'''
+    data= open(blockdevice).read(108)
+    if data[0:6] != 'LUKS\xba\xbe':
+        raise Exception("Not a LUKS device (no LUKS magic detected)")
+    luks_version= struct.unpack('>H', data[6:8])[0]
+    assert luks_version == 1
+    offset_sectors= struct.unpack('>I', data[104:108])[0]
+    offset= offset_sectors * LUKS_SECTOR_SIZE
+    assert 592 <= offset <= 4*2**20
+    return offset
 
 blockdevice.register_data_class( "LUKS", Encrypted )
 
