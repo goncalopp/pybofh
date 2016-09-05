@@ -1,0 +1,7 @@
+Object,Class,Parent class,P. parent class,size (aprox)
+fs = decrypted.data,Filesystem.Ext3,Filesystem,Data,100MiB
+decrypted = encrypted.inner,encryption.Decrypted,InnerLayer,"BlockDevice, Openable",100MiB
+encrypted = drbd_res.data,encryption.Encrypted,OuterLayer,Data,101MiB
+drbd_vol= drbd_res.inner,drbd.Volume,InnerLayer,"BlockDevice, Openable",101MiB
+drbd_res = lv.data,drbd.Resource,OuterLayer,Data,102MiB
+lv = lvm.LV('/dev/vgX/lvY'),lvm.LV,BlockDevice,-,102MiB
