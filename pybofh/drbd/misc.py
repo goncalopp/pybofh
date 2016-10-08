@@ -1,3 +1,4 @@
+import re
 import os
 from functools import partial
 
@@ -26,10 +27,51 @@ def devices_list(named=True, absolute_paths=True, include_prefix=True):
     filter_naming= is_named if named else lambda x: not is_named(x)
     devices= filter(filter_naming, all_devices)
     if not include_prefix:
+        assert not absolute_paths #with removed prefixes, they are no longer valid paths
         devices= map(remove_prefix, devices)
     if absolute_paths:
         devices= [DEVICE_DIR+d for d in devices]
     return list(devices)
+
+def config_files():
+    '''Returns the list of resource configuration files'''
+    names= filter(lambda x:x.endswith( RESOURCE_CONFIGFILE_EXT ), os.listdir(CONFIG_DIR))
+    paths= [os.path.join(CONFIG_DIR,name) for name in names]
+    return paths
+
+def config_addresses(resource_file):
+    '''returns the addresses in a resource config file'''
+    data = open(resource_file).read()
+    addresses = re.findall('address +(.*?);', data)
+    addresses = map(str.strip, addresses)
+    return addresses
+
+def config_minor(resource_file):
+    '''returns the minor number in a resource config file'''
+    data = open(resource_file).read()
+    minors = re.findall('minor ([0-9]+)', data)
+    assert len(minors) == 1
+    return int(minors[0])
+
+def highest_port():
+    '''returns the highest port used in the config files
+    Useful for allocating a new one, if it's a continuous group.
+    Assumes the same port is used in the local and remote hosts'''
+    files = config_files()
+    address_pairs = map(config_addresses, files)
+    addresses = [ap[0] for ap in address_pairs]
+    ports = [addr.split(":")[1] for addr in addresses]
+    ports = map(int, ports)
+    return max(ports)
+
+def highest_minor():
+    '''returns the highest minor number used in the config files
+    Useful for allocating a new one, if it's a continuous group.'''
+    files = config_files()
+    minors = map(config_minor, files)
+    return max(minors)
+
+ 
 
 def resources_list():
     '''Lists the names of all resourses provided by configuration files in CONF_DIR'''
@@ -37,7 +79,15 @@ def resources_list():
         i1= cfgtxt.index('resource ')+len('resource ')
         i2= cfgtxt.index(' ', i1)
         return cfgtxt[i1:i2]
-    filenames= filter(lambda x:x.endswith( RESOURCE_CONFIGFILE_EXT ), os.listdir(CONFIG_DIR))
-    cfgtxts= [open(os.path.join(CONFIG_DIR,fn)).read() for fn in filenames]
+    filenames= config_files()
+    cfgtxts= [open(fn).read() for fn in filenames]
     return map(get_resource_name, cfgtxts)
 
+def metadata_size(resource_size_bytes):
+    '''Calculates a approximated drbd resource metadata size
+    The result is in bytes
+    Based on http://www.drbd.org/en/doc/users-guide-83/ch-internals
+    I believe this assumes 512 bytes sectors...'''
+    mb = 2**20
+    metadata_size_bytes = (int(resource_size_bytes / mb / 32768 ) + 1) * mb
+    return metadata_size_bytes
