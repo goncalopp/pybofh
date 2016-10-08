@@ -145,6 +145,10 @@ class Openable(object):
         "open" is defined as open() being called before'''
         return self.was_opened or self.was_fake_opened
 
+    @property
+    def is_externally_open(self):
+        return self._externally_open_data() is not None
+
     def __enter__(self):
         self.open()
         return self

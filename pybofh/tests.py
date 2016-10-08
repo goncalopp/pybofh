@@ -192,17 +192,21 @@ class LUKSTest(unittest.TestCase):
         bd2, encrypted2, decrypted2= self._create(format=False)
         self._check_not_accessable(decrypted)
         self._check_not_accessable(decrypted2)
+        self.assertFalse(decrypted2.is_externally_open)
         with decrypted as decrypted:
             self._check_accessable(decrypted)
             self._check_not_accessable(decrypted2)
+            self.assertTrue(decrypted2.is_externally_open)
             with decrypted2 as decrypted2:
                 self._check_accessable(decrypted)
                 self._check_accessable(decrypted2)
                 self.assertEqual(decrypted.path, decrypted2.path)
+                self.assertTrue(decrypted2.is_externally_open)
             self._check_accessable(decrypted)
             self._check_not_accessable(decrypted2)
         self._check_not_accessable(decrypted)
         self._check_not_accessable(decrypted2)
+        self.assertFalse(decrypted2.is_externally_open)
 
 
 class FilesystemTest(unittest.TestCase):
