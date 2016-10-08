@@ -241,7 +241,7 @@ class BaseBlockDevice( Resizeable ):
     @property
     def size(self):
         '''return the of the block device in bytes'''
-        return int(subprocess.check_output(['blockdev', '--getsize64', self.path]))
+        return size(self.path)
 
     def _set_path(self, device_path):
         if device_path and not os.path.exists(device_path):
@@ -363,7 +363,11 @@ class InnerLayer(BaseBlockDevice, Openable):
     def _externally_open_data(self):
         root= lsblk()
         path= os.path.realpath(self.outer.blockdevice.path)
-        dm_name= devicemapper_info(path)['Name']
+        try:
+            dm_name= devicemapper_info(path)['Name']
+        except Exception as e:
+            #might not be a devicemapper device
+            dm_name= path.split("/")[-1]
         outer_node= root.find_node(dm_name)
         if not len(outer_node.children):
             return None
@@ -610,9 +614,9 @@ def lsblk():
         try:
             i= line.index(TREE_SYMBOL)
             assert i%2==1 #each indent is two spaces, plus an extra tree char
+            return (i+1)/2
         except ValueError:
             return 0
-        return i/2
     def parse_line(line):
         try:
             text= line[line.index(TREE_SYMBOL)+len(TREE_SYMBOL):]
@@ -661,3 +665,7 @@ def dm_get_child(blockdevice_path):
     path= DM_DIR + c1.name
     assert os.path.exists(path)
     return path  
+
+def size(blockdevice_path):
+    '''return the of the block device in bytes'''
+    return int(subprocess.check_output(['blockdev', '--getsize64', blockdevice_path]))

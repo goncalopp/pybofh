@@ -33,7 +33,7 @@ class VG(object):
     def __init__(self, vg_name):
         self.name= vg_name
         if not self.name in getVGs():
-            raise Exception("VG {} does not exist".format(name))
+            raise Exception("VG {} does not exist".format(vg_name))
 
     @property
     def path(self):
