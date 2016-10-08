@@ -99,6 +99,10 @@ class LV(blockdevice.BaseBlockDevice):
             options.append("-f")
         subprocess.check_call( ["lvresize"] + options + ["--size", ssize, self.path])
 
+    def rename(self, new_name):
+        renameLV(self.vg.name, self.name, new_name)
+        self.name = new_name
+
 
 def getVGs():
     out= subprocess.check_output("vgdisplay")
@@ -126,6 +130,11 @@ def removeLV(vg, name, force=True):
     force_flag= "-f" if force else ""
     command="/sbin/lvremove {force_flag} {vg}/{name}".format(**locals())
     subprocess.check_call(command, shell=True)
+
+def renameLV(vg, name, new_name):
+    print "renaming LV {name}".format(**locals())
+    command= ["/sbin/lvrename", vg, name, new_name]
+    subprocess.check_call(command)
  
 def createPV(device, force=True):
     print "creating PV {device}".format(**locals())

@@ -143,6 +143,19 @@ class LVMTest(unittest.TestCase):
         self.assertEqual(lv.size, old_size)
         self._delete_stack(self, pv, vg, lv)
 
+    def test_lvm_rename(self):
+        pv, vg, lv= self._create_stack(self)
+        old_name = lv.name
+        new_name = "renamed"
+        vg.lv(old_name)
+        self.assertRaises(Exception, lambda : vg.lv(new_name))
+        lv.rename(new_name)
+        self.assertRaises(Exception, lambda : vg.lv(old_name))
+        vg.lv(new_name)
+        self._delete_stack(self, pv, vg, lv)
+
+
+
 class LUKSTest(unittest.TestCase):
     @staticmethod
     def _create_on_bd(testcase, bd, format=True):
