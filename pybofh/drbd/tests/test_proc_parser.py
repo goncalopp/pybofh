@@ -1,7 +1,7 @@
 import unittest
 from StringIO import StringIO
 
-import proc_parser
+from pybofh.drbd import proc_parser
 
 PROC_83= '''version: 8.3.0 (api:88/proto:86-89)
 GIT-hash: 9ba8b93e24d842f0dd3fb1f9b90e8348ddb95829 build by buildsystem@linbit, 2008-12-18 16:02:26

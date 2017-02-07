@@ -71,8 +71,6 @@ def highest_minor():
     minors = map(config_minor, files)
     return max(minors)
 
- 
-
 def resources_list():
     '''Lists the names of all resourses provided by configuration files in CONF_DIR'''
     def get_resource_name( cfgtxt ):

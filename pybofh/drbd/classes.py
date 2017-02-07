@@ -1,4 +1,5 @@
 import inspect
+import os
 from functools import partial
 
 import drbdadm
@@ -22,7 +23,6 @@ class Resource(object):
 
     @property
     def device(self):
-        return "/dev/drbd_"+self._name
-
-
- 
+        path= "/dev/drbd_"+self._name
+        assert os.path.exists(path)
+        return path
