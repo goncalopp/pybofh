@@ -1,5 +1,5 @@
 import os
-import subprocess
+from pybofh import shell as subprocess
 import shutil
 
 def patch_file( path, replacements={} ):

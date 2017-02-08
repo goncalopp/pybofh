@@ -2,7 +2,7 @@
 
 from pybofh.misc import file_type, lcm
 from pybofh.my_logging import get_logger
-import subprocess
+from pybofh import shell as subprocess
 import os
 import os.path
 import weakref

@@ -79,28 +79,28 @@ class MountPool(object):
         m.exit_callback= self._return_to_pool
         return m
 
-def mount(device, mountpoint, options=""):
+def mount(device, mountpoint, options=()):
     print "mounting {device} on {mountpoint}".format(**locals())
-    options= "-o "+options if options else ""
-    command='mount {0} {1} {2}'.format(options, device,mountpoint)
-    p=subprocess.check_call(command, shell=True)
+    options = ("-o",) + options if options else ()
+    command= ("/bin/mount",) + options + (device, mountpoint)
+    p=subprocess.check_call(command)
 
 def unmount(device):
     print "unmounting {device}".format(**locals())
-    command='umount {0}'.format(device)
-    p=subprocess.check_call(command, shell=True)
+    command= ('/bin/umount', device)
+    p=subprocess.check_call(command)
 
 def is_mountpoint( path ):
     assert os.path.isdir(path)
     return os.path.ismount(path)
 
-def create_filesystem(path, fs="btrfs", options=[]):
+def create_filesystem(path, fs="btrfs", options=()):
     print "creating {fs} filesystem on {path}".format(**locals())
     if fs=="btrfs":
         options.append("-f")
     options= " ".join(options) 
-    command="/sbin/mkfs.{fs} {options} {path}".format(**locals())
-    subprocess.check_call(command, shell=True)
+    command=("/sbin/mkfs.{}".format(fs)) + options +(path,)
+    subprocess.check_call(command)
 
 if __name__=="__main__":
     python_cli(globals().values())

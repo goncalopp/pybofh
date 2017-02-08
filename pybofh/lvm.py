@@ -1,5 +1,5 @@
 import os
-import subprocess
+from pybofh import shell as subprocess
 from misc import sfilter, rsplit
 from pybofh import blockdevice
 
@@ -122,14 +122,14 @@ def createLV(vg, name, size):
     if not isinstance(size, basestring):
         size= str(size)+"B"
     print "creating LV {name} with size={size}".format(**locals())
-    command="/sbin/lvcreate {vg} --name {name} --size {size}".format(**locals())
-    subprocess.check_call(command, shell=True)
+    command = ("/sbin/lvcreate", vg, "--name", name, "--size", size)
+    subprocess.check_call(command)
 
 def removeLV(vg, name, force=True):
     print "deleting LV {name}".format(**locals())
-    force_flag= "-f" if force else ""
-    command="/sbin/lvremove {force_flag} {vg}/{name}".format(**locals())
-    subprocess.check_call(command, shell=True)
+    force_flag= ("-f",) if force else ()
+    command = ("/sbin/lvremove",) + force_flag + ("{vg}/{name}".format(**locals()),)
+    subprocess.check_call(command)
 
 def renameLV(vg, name, new_name):
     print "renaming LV {name}".format(**locals())
@@ -138,24 +138,24 @@ def renameLV(vg, name, new_name):
  
 def createPV(device, force=True):
     print "creating PV {device}".format(**locals())
-    force_flag= "-f" if force else ""
-    command="/sbin/pvcreate {force_flag} {device}".format(**locals())
-    subprocess.check_call(command, shell=True)
+    force_flag= ("-f",) if force else ()
+    command= ("/sbin/pvcreate",) + force_flag + (device,)
+    subprocess.check_call(command)
 
 def createVG(name, pvdevice):
     print "creating VG {name} with PV {pvdevice}".format(**locals())
-    command="/sbin/vgcreate {name} {pvdevice}".format(**locals())
-    subprocess.check_call(command, shell=True)
+    command = ("/sbin/vgcreate", name, pvdevice)
+    subprocess.check_call(command)
 
 def removeVG(name):
     print "deleting VG {name}".format(**locals())
-    command="/sbin/vgremove {name}".format(**locals())
-    subprocess.check_call(command, shell=True)
+    command = ("/sbin/vgremove", name)
+    subprocess.check_call(command)
 
 def removePV(device):
     print "deleting PV {device}".format(**locals())
-    command="/sbin/pvremove {device}".format(**locals())
-    subprocess.check_call(command, shell=True)
+    command = ("/sbin/pvremove", device)
+    subprocess.check_call(command)
 
 def _parse_xxdisplay(output, expected_keys, is_separator_line, name_key, column2_start=24):
     '''Generic parser for output of pvdisplay, vgdisplay and lvdisplay'''

@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-import subprocess
+from pybofh import shell as subprocess
 from pybofh import blockdevice
 
 

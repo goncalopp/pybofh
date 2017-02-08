@@ -1,20 +1,20 @@
-import subprocess
+from pybofh import shell as subprocess
 import os
 
 def snapshot(fro, to):
     #command already prints #print "Creating snapshot of {fro} in {to}".format(**locals())
     assert not os.path.exists(to)
-    command= "/sbin/btrfs sub snap {0} {1}".format(fro, to)
-    subprocess.check_call(command, shell=True)
+    command= ("/sbin/btrfs", "sub", "snap", fro, to)
+    subprocess.check_call(command)
 
 def create_subvolume(path):
     print "Creating subvolume: {path}".format(**locals())
-    command= "/sbin/btrfs sub create {0}".format(path)
-    subprocess.check_call(command, shell=True)
+    command= ("/sbin/btrfs", "sub", "create", path)
+    subprocess.check_call(command)
 
 def get_subvolumes(path):
-    command= "/sbin/btrfs sub list {0}".format(path)
-    out= subprocess.check_output(command, shell=True)
+    command= ("/sbin/btrfs", "sub", "list", path)
+    out= subprocess.check_output(command)
     def line_to_subvol(line):
         splitted= line.split()
         assert splitted[0]=="ID"
@@ -32,8 +32,8 @@ def get_subvolume_id( fs_path, subvol_path ):
 
 def set_default_subvol( fs_path, subvol_id ):
     print "Setting default subvolume of {fs_path} to {subvol_id}".format(**locals())
-    command= "/sbin/btrfs sub set {subvol_id} {fs_path}".format(**locals())
-    subprocess.check_call(command, shell=True)    
+    command= ("/sbin/btrfs", "sub", "set", subvol_id, fs_path)
+    subprocess.check_call(command)
 
 def create_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_subv=True):
     '''Creates default subvolumes, and snapshots directory structure, migrating any existing data'''
@@ -93,8 +93,7 @@ def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/med
     assert not os.path.exists(SCRIPT_PATH+"/btrfs-snapshot")	#check btrfs-snapshot not installed
     assert os.path.isdir( snap_path )
     def check_not_installed(s):
-        s= "cat {0} | grep btrfs-snapshot | cat -".format(s)
-        if subprocess.check_output( s, shell=True)!="":
+        if "btrfs-snapshot" in open(s).read():
             raise Exception("btrfs-snapshot already installed on "+s)
     check_not_installed("/etc/anacrontab")
     map( check_not_installed, ("/etc/anacrontab", "/etc/cron.daily/*", "/etc/cron.weekly/*", "/etc/cron.monthly/*"))
@@ -105,7 +104,7 @@ def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/med
         '''365		26	yearly_snap	{SCRIPT_PATH}/btrfs-snapshot {fs_path} {snap_path} yearly  {yearly}  \n'''
         ).format(**locals())
     #copy script
-    subprocess.check_call("cp btrfs-snapshot "+SCRIPT_PATH, shell=True)
+    subprocess.check_call(("cp", "btrfs-snapshot", SCRIPT_PATH))
     #append anacrontab lines
     open(os.path.join(mountpoint, "etc","anacrontab"), "a").write( anacron_string )
 

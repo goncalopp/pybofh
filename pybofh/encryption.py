@@ -1,5 +1,5 @@
 import struct
-import subprocess
+from pybofh import shell as subprocess
 import os, os.path
 import time
 from cli import python_cli
@@ -107,8 +107,8 @@ def open_encrypted( device, key_file=None ):
 
 def close_encrypted( path ):
     log.info("closing encrypted disk {}".format(path))
-    command= '/sbin/cryptsetup luksClose {0}'.format( path )
-    subprocess.check_call( command, shell=True )
+    command= ('/sbin/cryptsetup', 'luksClose', path)
+    subprocess.check_call(command)
 
 def resize( path, size_bytes=None, max=False ):
     assert bool(size_bytes) or max

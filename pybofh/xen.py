@@ -96,8 +96,8 @@ class Domu(object):
     def start(self):
         print "starting domu {domu}".format(domu=self)
         cf= self.config.filename
-        command='{0} create {1}'.format(XM,cf)
-        subprocess.check_call(command, shell=True)
+        command= (XM, "create", cf)
+        subprocess.check_call(command)
 
     @property
     def isRunning(self):
@@ -110,8 +110,8 @@ def allDomus():
     return map(Domu, getAllDomuNames())
 
 def runningDomus( return_objects=True ):
-    command='{0} list'.format(XM)
-    out= subprocess.check_output(command, shell=True)
+    command= (XM, "list")
+    out= subprocess.check_output(command)
     running= [line.split()[0] for line in out.split('\n')[1:-1]]
     running.remove('Domain-0') #Domain-0 is not a DomU!
     if return_objects:
