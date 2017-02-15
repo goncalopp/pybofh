@@ -62,7 +62,7 @@ class ExtX(BaseFilesystem):
 
     def fsck(self):
         path= self.device.path
-        subprocess.check_call( ["e2fsck", "-f", path] )
+        subprocess.check_call( ("e2fsck", "-f", "-p", path) )
 
     def get_ext_info(self):
         out= subprocess.check_output(["dumpe2fs","-h", self.device.path])
