@@ -8,14 +8,14 @@ REMOVED= '[REMOVED]'
 
 class PV(blockdevice.Data):
     def create(self, **kwargs):
-        createPV(self.blockdevice.path, **kwargs)
+        create_pv(self.blockdevice.path, **kwargs)
 
-    def createVG(self, name, **kwargs):
-        createVG(name, self.blockdevice.path, **kwargs)
+    def create_vg(self, name, **kwargs):
+        create_vg(name, self.blockdevice.path, **kwargs)
         return VG(name)
 
     def remove(self):
-        removePV(self.blockdevice.path)
+        remove_pv(self.blockdevice.path)
         self.blockdevice= REMOVED
     
     @property
@@ -32,21 +32,21 @@ class PV(blockdevice.Data):
 class VG(object):
     def __init__(self, vg_name):
         self.name= vg_name
-        if not self.name in getVGs():
+        if not self.name in get_vgs():
             raise Exception("VG {} does not exist".format(vg_name))
 
     @property
     def path(self):
         return "/dev/{}/".format(self.name)
 
-    def getLVs(self):
-        names= getLVs(self.name, full_path=False)
+    def get_lvs(self):
+        names= get_lvs(self.name)
         lvs= [ LV(self, name) for name in names ]
         return lvs
 
 
-    def createLV( self, name, *args, **kwargs ):
-        createLV( self.name, name, *args, **kwargs)
+    def create_lv( self, name, *args, **kwargs ):
+        create_lv( self.name, name, *args, **kwargs)
         return LV( self, name )
 
     def lv(self, lv_name):
@@ -56,14 +56,14 @@ class VG(object):
         return "{}<{}>".format(self.__class__.__name__, self.name)
 
     def remove(self):
-        removeVG(self.name)
+        remove_vg(self.name)
         self.name= REMOVED
 
 class LV(blockdevice.BaseBlockDevice):
     def __init__( self, vg, lv_name ):
         if not isinstance(vg, VG):
             vg= VG(vg)
-        if not lv_name in getLVs(vg.name, full_path=False):
+        if not lv_name in get_lvs(vg.name):
             raise Exception("LV {} does not exist on VG {}".format(lv_name, vg.name))
         self.vg= vg
         self.name= lv_name
@@ -77,7 +77,7 @@ class LV(blockdevice.BaseBlockDevice):
         return "{}<{}>".format(self.__class__.__name__, self.name)
 
     def remove( self, *args, **kwargs ):
-        removeLV( self.vg.name, self.name, *args, **kwargs)
+        remove_lv( self.vg.name, self.name, *args, **kwargs)
         self.vg= REMOVED
         self.name= REMOVED
 
@@ -100,59 +100,60 @@ class LV(blockdevice.BaseBlockDevice):
         subprocess.check_call( ["lvresize"] + options + ["--size", ssize, self.path])
 
     def rename(self, new_name):
-        renameLV(self.vg.name, self.name, new_name)
+        rename_lv(self.vg.name, self.name, new_name)
         self.name = new_name
 
 
-def getVGs():
-    out= subprocess.check_output("vgdisplay")
+def get_vgs():
+    '''Returns a list of VG names'''
+    out= subprocess.check_output("/sbin/vgdisplay")
     vg_lines= sfilter('VG Name', out)
     vgs= [rsplit(x)[2] for x in vg_lines]
     return vgs
 
-def getLVs(vg, full_path=True):
-    dir="/dev/"+vg
-    disks= os.listdir(dir)
-    if full_path:
-        return [os.path.join(dir, x) for x in disks]
-    else:
-        return disks
+def get_lvs(vg=None):
+    '''Returns a list of LV names.
+    If vg!=None, filter to LVs on that particular VG'''
+    lvs = _parse_lvdisplay()
+    filtered_lvs = [(k,v) for k,v in lvs.items() if v['VG Name']==vg or vg is None] 
+    names = [k for k,_ in filtered_lvs]
+    return names
 
-def createLV(vg, name, size):
+def create_lv(vg, name, size):
     if not isinstance(size, basestring):
         size= str(size)+"B"
     print "creating LV {name} with size={size}".format(**locals())
     command = ("/sbin/lvcreate", vg, "--name", name, "--size", size)
     subprocess.check_call(command)
 
-def removeLV(vg, name, force=True):
+def remove_lv(vg, name, force=True):
     print "deleting LV {name}".format(**locals())
     force_flag= ("-f",) if force else ()
     command = ("/sbin/lvremove",) + force_flag + ("{vg}/{name}".format(**locals()),)
     subprocess.check_call(command)
 
-def renameLV(vg, name, new_name):
+def rename_lv(vg, name, new_name):
     print "renaming LV {name}".format(**locals())
-    command= ["/sbin/lvrename", vg, name, new_name]
+    command= ("/sbin/lvrename", vg, name, new_name)
     subprocess.check_call(command)
  
-def createPV(device, force=True):
+def create_pv(device, force=True):
     print "creating PV {device}".format(**locals())
     force_flag= ("-f",) if force else ()
     command= ("/sbin/pvcreate",) + force_flag + (device,)
     subprocess.check_call(command)
 
-def createVG(name, pvdevice):
+def create_vg(name, pvdevice):
     print "creating VG {name} with PV {pvdevice}".format(**locals())
     command = ("/sbin/vgcreate", name, pvdevice)
     subprocess.check_call(command)
 
-def removeVG(name):
+def remove_vg(name):
     print "deleting VG {name}".format(**locals())
     command = ("/sbin/vgremove", name)
     subprocess.check_call(command)
 
-def removePV(device):
+def remove_pv(device):
     print "deleting PV {device}".format(**locals())
     command = ("/sbin/pvremove", device)
     subprocess.check_call(command)

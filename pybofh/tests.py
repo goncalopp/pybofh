@@ -117,8 +117,8 @@ class LVMTest(unittest.TestCase):
         pv.create()
         pv= blockdevice.BlockDevice(TEST_BLOCKDEVICE).data
         testcase.assertIsInstance(pv, lvm.PV)
-        vg= pv.createVG(TEST_VG)
-        lv1= vg.createLV(TEST_LV, size) 
+        vg= pv.create_vg(TEST_VG)
+        lv1= vg.create_lv(TEST_LV, size) 
         return pv, vg, lv1
 
     @staticmethod

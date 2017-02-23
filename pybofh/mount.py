@@ -1,5 +1,6 @@
 #!/usr/bin/python
-import os,subprocess
+import os
+import pybofh.shell as subprocess
 from cli import python_cli
 
 class Mounted(object):
@@ -35,30 +36,32 @@ class Mounted(object):
 class NestedMounted(Mounted):
     '''A mounted mountpoint with other mountpoints inside. 
     Useful for mounting root filesystems with separate partitions for /boot, etc'''
-    def __init__(self, mounts, mountpoint):
+    def __init__(self, mounts):
         '''Example: NestedMounted( [('/dev/sdb2','/'),('/dev/sdb1', '/boot')], '/media/mount')
         will mount /dev/sdb2 in /media/mount and then /dev/sdb1 in /media/mount/boot'''
-        mounts.sort( key= lambda m: len(m[1])) #make sure we mount directories before subdirectories
+        mounts = sorted(mounts, key= lambda m: len(m[1])) #make sure we mount directories before subdirectories
         self.mounts= [Mounted(*t) for t in mounts]
+        self.mountpoint = self.mounts[0].mountpoint
 
     def _mount(self):
         mounted=[]
         try:
             for m in self.mounts:
-                sub.__enter__()
+                m.__enter__()
                 mounted.append(m)
-        finally:
-            for m in mounted:
-                m.__exit__()
+        except:
+            for m in reversed(mounted):
+                m.__exit__(None, None, None)
+
 
     def _unmount(self):
-        for m in reversed(self.submounts):
-            m.__exit__()
+        for m in reversed(self.mounts):
+            m.__exit__(None, None, None)
 
 class MountPool(object):
     '''A Pool of mountpoints'''
     def __init__(self, mountpoints):
-        self.free_mountpoints= mountpoints[:]
+        self.free_mountpoints= list(reversed(mountpoints))
         self.used_mountpoints= []
 
     def _return_to_pool(self, mounted_file):

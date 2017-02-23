@@ -37,8 +37,8 @@ class ExtX(BaseFilesystem):
     @property
     def resize_granularity(self):
         #this is the smallest that seems to work in practice,
-        #although the resize2fs promises better...
-        return 4*1024 #1K is the smallest we can promise
+        #although resize2fs' man promises better...
+        return 4*1024 #4K
 
     def _resize(self, byte_size, minimum, maximum, interactive):
         self.fsck() #otherwise resize2fs refuses to proceed
