@@ -4,7 +4,12 @@ import unittest
 import pybofh
 from pybofh import lvm, encryption, blockdevice, filesystem, mount
 
-TEST_BLOCKDEVICE= '/dev/vgpersonal/test_lv'
+if not __name__=="__main__":
+    #these tests should not be run automatically
+    unittest = lambda : None
+    unittest.TestCase = object
+
+TEST_BLOCKDEVICE= '/dev/vglocal/test_lv'
 TEST_MOUNTPOINT= '/media/tmp'
 TEST_VG= 'test_vg_pybofh'
 TEST_LV= 'test_lv_pybofh'

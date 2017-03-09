@@ -6,17 +6,8 @@ from pybofh import blockdevice
 class BaseFilesystem(blockdevice.Data):
     __metaclass__= ABCMeta
     def __init__(self, device):
-        self.device= device
+        blockdevice.Data.__init__(self, device)
     
-    @property
-    def size(self):
-        '''the size of the filesystem in bytes'''
-        return self._get_size()
-
-    @abstractmethod
-    def _get_size(self):
-        raise NotImplementedError
-
     @abstractmethod
     def fsck(self):
         raise NotImplementedError
@@ -55,7 +46,7 @@ class ExtX(BaseFilesystem):
             args+= [path, str(kb_size)+"K" ]
         subprocess.check_call( ["resize2fs"]+args )
 
-    def _get_size(self):
+    def _size(self):
         info= self.get_ext_info()
         bc,bs= info["Block count"], info["Block size"]
         return int(bc)*int(bs)

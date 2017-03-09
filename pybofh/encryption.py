@@ -20,14 +20,13 @@ class Encrypted(blockdevice.OuterLayer, blockdevice.Parametrizable):
     def _inner_layer_class(self):
         return Decrypted
 
-    @property
-    def size(self):
+    def _size(self):
         try:
-            header_size= luks_data_offset(self.blockdevice.path)
+            header_size= luks_data_offset(self.device.path)
             return header_size + self.inner.size
         except blockdevice.NotReady:
             #there's no way to know, just return the enclosing blockdevice size
-            return self.blockdevice.size
+            return self.device.size
 
     @property
     def resize_granularity(self):
@@ -53,7 +52,7 @@ class Decrypted(blockdevice.InnerLayer, blockdevice.Parametrizable):
         params= dict(self._params)
         params.update(kwargs)
         key_file= params.get('key_file', None)
-        path= open_encrypted( self.outer.blockdevice.path, key_file=key_file )
+        path= open_encrypted( self.outer.device.path, key_file=key_file )
         return path
     
     def _close(self):
@@ -75,8 +74,8 @@ class Decrypted(blockdevice.InnerLayer, blockdevice.Parametrizable):
     def _on_open(self, path, true_open):
         blockdevice.InnerLayer._on_open(self, path, true_open)
         inner_size= self.size
-        outer_size= self.outer.blockdevice.size
-        header_size= luks_data_offset(self.outer.blockdevice.path)
+        outer_size= self.outer.device.size
+        header_size= luks_data_offset(self.outer.device.path)
         assert (outer_size - inner_size) == header_size
 
 def create_encrypted( device, key_file=None, interactive=True ):

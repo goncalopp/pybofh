@@ -23,14 +23,14 @@ log = get_logger(__name__)
 data_classes=[] 
  
 def is_data_class_filetype( string_match, blockdevice ):
-    '''Checks if a blockdevice belongs to a dat a class by testing if a substring
+    '''Checks if a blockdevice belongs to a data class by testing if a substring
     exists on its file type'''
     return string_match in file_type(blockdevice.path)
 
 def register_data_class( match_obj, cls, priority=False ):
     '''Registers a class that represents a Data subclass - Ext2, for example.
-    If match_obj is a function, it should take a single argument - a block device path - and return True iff cls is a appropriate representation of that block device content.
-    If match_obj is a string, it checks the filetype of the bock device matches that string instead'''
+    If match_obj is a function, it should take a single argument - a block device - and return True iff cls is a appropriate representation of that block device content.
+    If match_obj is a string, it checks the filetype of the block device matches that string instead'''
     if isinstance(match_obj, basestring):
         string_match= match_obj
         f= partial(is_data_class_filetype, string_match)
@@ -56,12 +56,18 @@ class Resizeable(object):
     class ResizeError(Exception):
         pass
     class WrongSize(ResizeError):
-        '''raised when asked to resize someting to a impossible size'''
+        '''raised when asked to resize someting to a impossible sizei, or the current size is unexpected'''
         pass
 
     @abstractproperty
-    def size(self):
-        '''returns the size of this, in bytes'''
+    def _size(self):
+        '''Returns the size of this, in bytes'''
+        pass
+
+    @abstractproperty
+    def resize_granularity(self):
+        '''Returns the minimum size in bytes that this lass suports resizing on.
+        Example: block size'''
         pass
 
     def _round_to_granularity(self, n, round_up=True):
@@ -94,22 +100,32 @@ class Resizeable(object):
         if minimum==True, will resize to the minimum size possible.
         if maximum==True, will resize to the maximum size possible.
         if approximate==True, will automatically round UP according to resize_granularity'''
-        assert int(bool(byte_size)) + int(minimum) + int(maximum) == 1
-        byte_size= self._process_resize_size(byte_size, relative, approximate, round_up)
+        if not int(bool(byte_size)) + int(minimum) + int(maximum) == 1:
+            raise Resizeable.ResizeError("""resize() arguments "byte_size", "minimum" and "maximum" are mutually exclusive""")
+        if byte_size:
+            byte_size= self._process_resize_size(byte_size, relative, approximate, round_up)
         log.info("Resizing {} from {} to {} bytes".format(self, self.size, byte_size))
         self._resize(byte_size, minimum, maximum, interactive, **kwargs)
-        assert self.size == byte_size
+        if byte_size:
+            if not self.size == byte_size:
+                raise Resizeable.ResizeError("After resizing {} to {} bytes, got a size of {} bytes instead".format(self, byte_size, self.size))
         return byte_size
 
     @abstractmethod
     def _resize(self, byte_size, minimum, maximum, interactive, **kwargs):
         pass
 
-    @abstractproperty
-    def resize_granularity(self):
-        '''Returns the minimum size in bytes that this lass suports resizing on.
-        Example: block size'''
-        pass
+    @property
+    def size(self):
+        '''The size of this, in bytes'''
+        s = self._size()
+        try:
+            gr = self.resize_granularity
+        except Exception:
+            gr = 1
+        if s % gr != 0:
+            raise Resizeable.WrongSize("Size of {} is {}, but expected it to be a multiple of granularity {}".format(self, s, gr))
+        return s
 
 class Openable(object):
     '''Represents an object that can be "opened". The semantics of "opened" are
@@ -135,7 +151,7 @@ class Openable(object):
     @abstractmethod
     def _externally_open_data(self):
         '''If this Openable was opened by something this object doesn't control
-        ("externally open"), returns the associated data (see open()).
+        ("externally open"), returns the associated data (see _open()).
         Otherwise returns None'''
         raise NotImplementedError
 
@@ -162,7 +178,7 @@ class Openable(object):
         true_open indicates whether _open was actually called'''
         pass
 
-    def _on_close(true_close):
+    def _on_close(self, true_close):
         '''Similar to _on_open'''
         pass
 
@@ -218,11 +234,12 @@ class Parametrizable(object):
     class behaviour'''
     __metaclass__=ABCMeta
     def __init__(self, **kwargs):
-        self._params= kwargs
+        self._params= {}
+        self.set_params(**kwargs)
     
     def set_params(self, **kwargs):
         in_params= set(kwargs.keys())
-        accepted_keys= set(kwargs.keys()) and set(self.accepted_params)
+        accepted_keys= set(kwargs.keys()) & set(self.accepted_params)
         rejected_keys= in_params - accepted_keys 
         accepted= {k: kwargs[k] for k in accepted_keys}
         self._params.update(accepted)
@@ -242,9 +259,7 @@ class BaseBlockDevice( Resizeable ):
         self._last_data= None
         self._last_data_class= None
 
-    @property
-    def size(self):
-        '''return the of the block device in bytes'''
+    def _size(self):
         return size(self.path)
 
     def _set_path(self, device_path):
@@ -298,16 +313,11 @@ class Data(Resizeable):
     __metaclass__=ABCMeta
     '''A representation of the data of a block device.
     Example: the data of a LV could be LUKS'''
-    def __init__(self, blockdevice):
-        if isinstance(blockdevice, basestring):
-            path= blockdevice #assume this is a path to a blockdevice
-            blockdevice= BlockDevice(path)
-        if not isinstance(blockdevice, BaseBlockDevice):
-            raise Exception("You tried to initialize a new Data object without providing a parent block device")
-        self.blockdevice= blockdevice
-    
+    def __init__(self, blockdevice_or_path):
+        self.device= blockdevice(blockdevice_or_path)
+
     def __repr__(self):
-        return "{} data".format(self.__class__.__name__)
+        return "{}({})".format(self.__class__.__name__, self.device)
 
 class OuterLayer(Data):
     '''A outer layer on a layered block device.
@@ -326,7 +336,7 @@ class OuterLayer(Data):
             pass
     
     def _sanity_check(self):
-        assert self.size == self.blockdevice.size #be careful if you need to remove this, it's an unwritten assumption throughout layer code
+        assert self.size == self.device.size #be careful if you need to remove this, it's an unwritten assumption throughout layer code
         assert self.inner.size == self.size - self.overhead #note overhead is calculated as the difference between them right now
 
     @property
@@ -336,7 +346,11 @@ class OuterLayer(Data):
 
     @property
     def overhead(self):
-        oh= self.size - self.inner.size
+        try:
+            inner_size = self.inner.size
+        except NotReady:
+            raise NotReady("The inner layer is not open")
+        oh= self.size - inner_size
         assert oh >= 0
         assert oh < 16 * 2**20 #16MB, just a sanity check, may need to be raised
         return oh   
@@ -365,21 +379,9 @@ class InnerLayer(BaseBlockDevice, Openable):
         return o
 
     def _externally_open_data(self):
-        root= lsblk()
-        path= os.path.realpath(self.outer.blockdevice.path)
-        try:
-            dm_name= devicemapper_info(path)['Name']
-        except Exception as e:
-            #might not be a devicemapper device
-            dm_name= path.split("/")[-1]
-        outer_node= root.find_node(dm_name)
-        if not len(outer_node.children):
-            return None
-        c1= outer_node.children[0]
-        path= DM_DIR + c1.name
-        assert os.path.exists(path)
-        return path
-    
+        outer_path = self.outer.device.path
+        return get_blockdevice_child(outer_path)
+
     def _on_open( self, path, true_open ):
         assert os.path.exists(path)
         self._set_path( path )
@@ -405,12 +407,11 @@ class BlockDeviceStack(Resizeable, Openable):
         Resizeable.__init__(self)
         Openable.__init__(self, **kwargs)
         if isinstance(outermost_layer, InnerLayer):
-            outermost_layer= self.get_outer(outermost_layer).blockdevice
-        if isinstance(outermost_layer, Data):
-            outermost_layer= outermost_layer.blockdevice
-        if not isinstance(outermost_layer, BaseBlockDevice):
-            # could be a path
-            outermost_layer= BlockDevice(outermost_layer) 
+            outermost_layer= self.get_outer(outermost_layer).device
+        elif isinstance(outermost_layer, Data):
+            outermost_layer= outermost_layer.device
+        else:
+            outermost_layer= blockdevice(outermost_layer) 
         self._outermost= outermost_layer
         self._layers= None
 
@@ -479,8 +480,7 @@ class BlockDeviceStack(Resizeable, Openable):
         granularities= [l.resize_granularity for l in self.layers]
         return lcm(*granularities)
 
-    @property
-    def size(self):
+    def _size(self):
         return self.outermost.size
 
     @property
@@ -505,8 +505,10 @@ class BlockDeviceStack(Resizeable, Openable):
                 layer.data.resize(byte_size=target_size, **common_args)
                 assert layer.data.inner.size > inner_size #make sure the OuterLayer resized the InnerLayer
                 assert layer.data.inner.size == layer.data.size - layer.data.overhead
-                target_size-= max(layer.data.overhead, granularity)
-            #finally, resize the innermost layer data (which is not an OuterLayer)
+                log.debug("blabla over {}, gran {}, target {}".format(layer.data.overhead, granularity, target_size))
+                target_size= layer.data.inner.size
+                log.debug(target_size)
+            #finally, resize the data of the innermost layer (which is not an OuterLayer)
             self.innermost.data.resize(byte_size=self.innermost.size, **common_args)
         else: #reduction
             common_args["round_up"]= True
@@ -672,4 +674,33 @@ def dm_get_child(blockdevice_path):
 
 def size(blockdevice_path):
     '''return the of the block device in bytes'''
-    return int(subprocess.check_output(['blockdev', '--getsize64', blockdevice_path]))
+    return int(subprocess.check_output(('/sbin/blockdev', '--getsize64', blockdevice_path)))
+
+def get_blockdevice_child(path):
+        root= lsblk()
+        path= os.path.realpath(path)
+        try:
+            dm_name= devicemapper_info(path)['Name']
+        except Exception as e:
+            #might not be a devicemapper device
+            dm_name= path.split("/")[-1]
+        outer_node= root.find_node(dm_name)
+        if not len(outer_node.children):
+            return None
+        c1= outer_node.children[0]
+        path= DM_DIR + c1.name
+        assert os.path.exists(path)
+        return path
+
+def blockdevice_from_path(path):
+    return BlockDevice(path)
+
+def blockdevice(path_or_object):
+    '''Returns a generic BlockDevice for a path.
+    If the provided argument is already a BlockDevice, return it unchanged'''
+    if isinstance(path_or_object, basestring):
+        return blockdevice_from_path(path_or_object)
+    elif isinstance(path_or_object, BaseBlockDevice):
+        return path_or_object
+    else:
+        raise Exception("Can't get a blockdevice from {}".format(path_or_object))

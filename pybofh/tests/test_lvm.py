@@ -99,13 +99,13 @@ class PVTest(unittest.TestCase):
 
     def test_create(self):
         pv = lvm.PV(PV)
-        pv.blockdevice.path = PV # manual mock
+        pv.device.path = PV # manual mock
         pv.create()
         shell.run_process.assert_has_calls([mock.call(('/sbin/pvcreate', "-f", PV))])
 
     def test_create_vg(self):
         pv = lvm.PV(PV)
-        pv.blockdevice.path = PV # manual mock
+        pv.device.path = PV # manual mock
         vg = pv.create_vg(VG)
         shell.run_process.assert_has_calls([mock.call(('/sbin/vgcreate', VG, PV))])
         self.assertIsInstance(vg, lvm.VG)
@@ -113,7 +113,7 @@ class PVTest(unittest.TestCase):
 
     def test_remove(self):
         pv = lvm.PV(PV)
-        pv.blockdevice.path = PV # manual mock
+        pv.device.path = PV # manual mock
         pv.remove()
         shell.run_process.assert_has_calls([mock.call(('/sbin/pvremove', PV))])
 

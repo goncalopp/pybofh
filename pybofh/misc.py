@@ -29,7 +29,7 @@ def rsplit( string, delimiter=' ' ):
     return list(filter(lambda x: x!='', string.split(delimiter)))
 
 def file_type( path ):
-    return subprocess.check_output( ["file", "--special", "--dereference", path])
+    return subprocess.check_output(("file", "--special", "--dereference", path))
 
 def gcd(a,b):
     '''Greatest common denominator'''

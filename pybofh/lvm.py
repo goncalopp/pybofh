@@ -8,18 +8,17 @@ REMOVED= '[REMOVED]'
 
 class PV(blockdevice.Data):
     def create(self, **kwargs):
-        create_pv(self.blockdevice.path, **kwargs)
+        create_pv(self.device.path, **kwargs)
 
     def create_vg(self, name, **kwargs):
-        create_vg(name, self.blockdevice.path, **kwargs)
+        create_vg(name, self.device.path, **kwargs)
         return VG(name)
 
     def remove(self):
-        remove_pv(self.blockdevice.path)
-        self.blockdevice= REMOVED
+        remove_pv(self.device.path)
+        self.device= REMOVED
     
-    @property
-    def size(self):
+    def _size(self):
         raise NotImplementedError
 
     @property
