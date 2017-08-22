@@ -49,5 +49,7 @@ setup(
     keywords='linux sysadmin library toolset',
 
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
+    setup_requires=['nose', 'mock'],
+    test_suite='nose.collector'
 
 )
