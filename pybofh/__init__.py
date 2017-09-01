@@ -8,6 +8,7 @@ import btrfs
 import xen
 import lvm
 import drbd
+import settingsmodule
 
 def reverse_operation( f, args, kwargs ):
     if f==lvm.createLV:
@@ -16,5 +17,5 @@ def reverse_operation( f, args, kwargs ):
 
 from atomic_operations import AtomicOperationSequence
 Atomic= partial( AtomicOperationSequence, reverse_operation ) 
-
+settings = settingsmodule.Settings()
 __all__=[ blockdevice, mount, filesystem, btrfs, xen, lvm, drbd, Atomic ]
