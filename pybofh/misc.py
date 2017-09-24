@@ -1,5 +1,5 @@
 import os
-from pybofh import shell as subprocess
+from pybofh import shell
 import shutil
 
 def patch_file( path, replacements={} ):
@@ -29,7 +29,7 @@ def rsplit( string, delimiter=' ' ):
     return list(filter(lambda x: x!='', string.split(delimiter)))
 
 def file_type( path ):
-    return subprocess.check_output(("file", "--special", "--dereference", path))
+    return shell.get().check_output(("file", "--special", "--dereference", path))
 
 def gcd(a,b):
     '''Greatest common denominator'''

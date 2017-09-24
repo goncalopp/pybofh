@@ -1,5 +1,5 @@
 import struct
-from pybofh import shell as subprocess
+from pybofh import shell
 import os, os.path
 import time
 from cli import python_cli
@@ -87,7 +87,7 @@ def create_encrypted( device, key_file=None, interactive=True ):
     if not interactive:
         command.extend(['--batch-mode', '--verify-passphrase'])
     command.append(device)
-    subprocess.check_call( command )
+    shell.get().check_call( command )
 
 def open_encrypted( device, key_file=None ):
     '''decrypt and return path to decrypted disk device'''
@@ -100,14 +100,14 @@ def open_encrypted( device, key_file=None ):
     if key_file:
         command.extend(['--key-file', key_file])
     command.extend([device, name])
-    subprocess.check_call(command)
+    shell.get().check_call(command)
     assert os.path.exists(u_path)
     return u_path
 
 def close_encrypted( path ):
     log.info("closing encrypted disk {}".format(path))
     command= ('/sbin/cryptsetup', 'luksClose', path)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
 
 def resize( path, size_bytes=None, max=False ):
     assert bool(size_bytes) or max
@@ -117,7 +117,7 @@ def resize( path, size_bytes=None, max=False ):
         size= size_bytes / LUKS_SECTOR_SIZE
         command+= ["--size", str(size)]
     command.append(path)
-    subprocess.check_call( command )
+    shell.get().check_call( command )
 
 def luks_name( blockdevice ):
     '''given a path to a blockdevice, returns the LUKS name used to identify it.

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import os
-import pybofh.shell as subprocess
+import pybofh.shell as shell
 from cli import python_cli
 
 class Mounted(object):
@@ -86,12 +86,12 @@ def mount(device, mountpoint, options=()):
     print "mounting {device} on {mountpoint}".format(**locals())
     options = ("-o",) + options if options else ()
     command= ("/bin/mount",) + options + (device, mountpoint)
-    p=subprocess.check_call(command)
+    p = shell.get().check_call(command)
 
 def unmount(device):
     print "unmounting {device}".format(**locals())
     command= ('/bin/umount', device)
-    p=subprocess.check_call(command)
+    p = shell.get().check_call(command)
 
 def is_mountpoint( path ):
     assert os.path.isdir(path)
@@ -103,7 +103,7 @@ def create_filesystem(path, fs="btrfs", options=()):
         options.append("-f")
     options= " ".join(options) 
     command=("/sbin/mkfs.{}".format(fs)) + options +(path,)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
 
 if __name__=="__main__":
     python_cli(globals().values())

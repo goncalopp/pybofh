@@ -5,7 +5,7 @@
 import unittest
 import mock
 from pybofh import lvm
-from pybofh import shell
+from pybofh.shell import MockShell
 
 PV = '/dev/in1'
 VG = 'in_vg'
@@ -73,12 +73,16 @@ def command_side_effect(command):
         return LVDISPLAY_DATA
     return mock.DEFAULT
 
-def generic_setup():
+def generic_setup(test_instance):
     '''Setups mocks'''
+    test_instance.shell = shell = MockShell()
+    shell.add_mock(('/sbin/vgdisplay'), VGDISPLAY_DATA)
+    shell.add_mock(('/sbin/lvdisplay'), LVDISPLAY_DATA)
+    shell.add_mock(lambda _: True, mock.DEFAULT) # catch-all
     mocklist = [
         {"target": "os.path.isdir"},
         {"target": "os.path.exists"},
-        {"target": "pybofh.shell.run_process", "side_effect": command_side_effect},
+        {"target": "pybofh.shell.get", "side_effect": lambda: shell},
         {"target": "pybofh.blockdevice.BlockDevice"},
         {"target": "pybofh.blockdevice.Data"},
         ]
@@ -88,7 +92,7 @@ def generic_setup():
 
 class PVTest(unittest.TestCase):
     def setUp(self):
-        generic_setup()
+        generic_setup(self)
 
     def tearDown(self):
         mock.patch.stopall()
@@ -101,13 +105,13 @@ class PVTest(unittest.TestCase):
         pv = lvm.PV(PV)
         pv.device.path = PV # manual mock
         pv.create()
-        shell.run_process.assert_has_calls([mock.call(('/sbin/pvcreate', "-f", PV))])
+        self.assertIn(('/sbin/pvcreate', "-f", PV), self.shell.run_commands)
 
     def test_create_vg(self):
         pv = lvm.PV(PV)
         pv.device.path = PV # manual mock
         vg = pv.create_vg(VG)
-        shell.run_process.assert_has_calls([mock.call(('/sbin/vgcreate', VG, PV))])
+        self.assertIn(('/sbin/vgcreate', VG, PV), self.shell.run_commands)
         self.assertIsInstance(vg, lvm.VG)
         self.assertEqual(vg.name, VG)
 
@@ -115,11 +119,11 @@ class PVTest(unittest.TestCase):
         pv = lvm.PV(PV)
         pv.device.path = PV # manual mock
         pv.remove()
-        shell.run_process.assert_has_calls([mock.call(('/sbin/pvremove', PV))])
+        self.assertIn(('/sbin/pvremove', PV), self.shell.run_commands)
 
 class VGTest(unittest.TestCase):
     def setUp(self):
-        generic_setup()
+        generic_setup(self)
 
     def tearDown(self):
         mock.patch.stopall()
@@ -127,7 +131,7 @@ class VGTest(unittest.TestCase):
     def test_get_lvs(self):
         vg = lvm.VG(VG)
         lvs = vg.get_lvs()
-        shell.run_process.assert_called_with('/sbin/lvdisplay')
+        self.assertIn(('/sbin/lvdisplay'), self.shell.run_commands)
         self.assertEqual(len(lvs), 1)
         self.assertIsInstance(lvs[0], lvm.LV)
         self.assertEqual(lvs[0].name, LV)
@@ -135,97 +139,97 @@ class VGTest(unittest.TestCase):
     def test_create_lv(self):
         vg = lvm.VG(VG)
         lv = vg.create_lv(LV, size="1G")
-        shell.run_process.assert_has_calls([mock.call(('/sbin/lvcreate', VG, '--name', LV, '--size', '1G'))])
+        self.assertIn(('/sbin/lvcreate', VG, '--name', LV, '--size', '1G'), self.shell.run_commands)
         self.assertIsInstance(lv, lvm.LV)
         self.assertEqual(lv.name, LV)
 
     def test_lv(self):
         vg = lvm.VG(VG)
         lv = vg.lv(LV)
-        shell.run_process.assert_has_calls([mock.call('/sbin/lvdisplay')])
+        self.assertIn(('/sbin/lvdisplay'), self.shell.run_commands)
         self.assertIsInstance(lv, lvm.LV)
         self.assertEqual(lv.name, LV)
 
     def test_remove(self):
         vg = lvm.VG(VG)
         vg.remove()
-        shell.run_process.assert_has_calls([mock.call(('/sbin/vgremove', VG))])
+        self.assertIn((('/sbin/vgremove', VG)), self.shell.run_commands)
 
 class LVTest(unittest.TestCase):
     def setUp(self):
-        generic_setup()
+        generic_setup(self)
 
     def tearDown(self):
         mock.patch.stopall()
 
     def test_init(self):
         lv = lvm.LV(VG, LV)
-        shell.run_process.assert_has_calls([mock.call('/sbin/lvdisplay')])
+        self.assertIn(('/sbin/lvdisplay'), self.shell.run_commands)
         self.assertIsInstance(lv, lvm.LV)
         self.assertEqual(lv.name, LV)
 
     def test_remove(self):
         lv = lvm.LV(VG, LV)
         lv.remove()
-        shell.run_process.assert_has_calls([mock.call(('/sbin/lvremove', '-f', VG + '/' + LV))])
+        self.assertIn((('/sbin/lvremove', '-f', VG + '/' + LV)), self.shell.run_commands)
 
     def test_resize(self):
         pass # TODO
         #lv = lvm.LV(VG, LV)
         #lv.resize(100 * 2**20, no_data=True)
-        #shell.run_process.assert_has_calls([mock.call(('/sbin/lvresize', '-f', VG + '/' + LV))])
+        #self.assertIn((('/sbin/lvresize', '-f', VG + '/' + LV)), self.shell.run_commands)
 
     def test_rename(self):
         lv = lvm.LV(VG, LV)
         lv.rename('newname')
-        shell.run_process.assert_has_calls([mock.call(('/sbin/lvrename', VG, LV, 'newname'))])
+        self.assertIn((('/sbin/lvrename', VG, LV, 'newname')), self.shell.run_commands)
 
 class ModuleFunctionsTest(unittest.TestCase):
     def setUp(self):
-        generic_setup()
+        generic_setup(self)
 
     def tearDown(self):
         mock.patch.stopall()
 
     def test_get_vgs(self):
         vgs = lvm.get_vgs()
-        shell.run_process.assert_called_once_with('/sbin/vgdisplay')
+        self.assertIn(('/sbin/vgdisplay'), self.shell.run_commands)
         self.assertEqual(len(vgs), 1)
         self.assertItemsEqual(vgs, [VG])
 
     def test_get_lvs(self):
         lvs = lvm.get_lvs(VG)
-        shell.run_process.assert_called_once_with('/sbin/lvdisplay')
+        self.assertIn(('/sbin/lvdisplay'), self.shell.run_commands)
         self.assertEqual(len(lvs), 1)
         self.assertItemsEqual(lvs, [LV])
 
     def test_create_lv(self):
         lvm.create_lv(VG, LV, '1G')
-        shell.run_process.assert_called_once_with(('/sbin/lvcreate', VG, '--name', LV, '--size', '1G'))
+        self.assertIn((('/sbin/lvcreate', VG, '--name', LV, '--size', '1G')), self.shell.run_commands)
 
     def test_remove_lv(self):
         lvm.remove_lv(VG, LV)
-        shell.run_process.assert_called_once_with(('/sbin/lvremove', "-f", VG + "/" + LV))
+        self.assertIn((('/sbin/lvremove', "-f", VG + "/" + LV)), self.shell.run_commands)
 
     def test_rename_lv(self):
         lvm.rename_lv(VG, LV, "lvnewname")
-        shell.run_process.assert_called_once_with(('/sbin/lvrename', VG, LV, "lvnewname"))
+        self.assertIn((('/sbin/lvrename', VG, LV, "lvnewname")), self.shell.run_commands)
 
     def test_create_pv(self):
         lvm.create_pv(PV)
-        shell.run_process.assert_called_once_with(('/sbin/pvcreate', "-f", PV))
+        self.assertIn((('/sbin/pvcreate', "-f", PV)), self.shell.run_commands)
 
     def test_create_vg(self):
         lvm.create_vg(VG, PV)
-        shell.run_process.assert_called_once_with(('/sbin/vgcreate', VG, PV))
+        self.assertIn((('/sbin/vgcreate', VG, PV)), self.shell.run_commands)
 
     def test_remove_vg(self):
         lvm.remove_vg(VG)
-        shell.run_process.assert_called_once_with(('/sbin/vgremove', VG))
+        self.assertIn((('/sbin/vgremove', VG)), self.shell.run_commands)
 
     def test_remove_pv(self):
         lvm.remove_pv(PV)
-        shell.run_process.assert_called_once_with(('/sbin/pvremove', PV))
+        self.assertIn((('/sbin/pvremove', PV)), self.shell.run_commands)
 
 if __name__ == "__main__":
     unittest.main()

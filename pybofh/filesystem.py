@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from pybofh import shell as subprocess
+from pybofh import shell
 from pybofh import blockdevice
 
 
@@ -44,7 +44,7 @@ class ExtX(BaseFilesystem):
             args+=["-M", path]
         else:
             args+= [path, str(kb_size)+"K" ]
-        subprocess.check_call( ["resize2fs"]+args )
+        shell.get().check_call( ["resize2fs"]+args )
 
     def _size(self):
         info= self.get_ext_info()
@@ -53,10 +53,10 @@ class ExtX(BaseFilesystem):
 
     def fsck(self):
         path= self.device.path
-        subprocess.check_call( ("e2fsck", "-f", "-p", path) )
+        shell.get().check_call( ("e2fsck", "-f", "-p", path) )
 
     def get_ext_info(self):
-        out= subprocess.check_output(["dumpe2fs","-h", self.device.path])
+        out= shell.get().check_output(["dumpe2fs","-h", self.device.path])
         data={}
         for line in out.splitlines():
             try:
@@ -72,7 +72,7 @@ class ExtX(BaseFilesystem):
     @classmethod
     def _create(cls, path, *args, **kwargs):
         command= "mkfs.{}".format(cls.NAME)
-        subprocess.check_call([command, path])
+        shell.get().check_call([command, path])
 
 
 class Ext2(ExtX):

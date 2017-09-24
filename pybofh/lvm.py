@@ -1,5 +1,5 @@
 import os
-from pybofh import shell as subprocess
+from pybofh import shell
 from misc import sfilter, rsplit
 from pybofh import blockdevice
 
@@ -96,7 +96,7 @@ class LV(blockdevice.BaseBlockDevice):
         options=[]
         if not interactive:
             options.append("-f")
-        subprocess.check_call( ["lvresize"] + options + ["--size", ssize, self.path])
+        shell.get().check_call( ["lvresize"] + options + ["--size", ssize, self.path])
 
     def rename(self, new_name):
         rename_lv(self.vg.name, self.name, new_name)
@@ -105,7 +105,7 @@ class LV(blockdevice.BaseBlockDevice):
 
 def get_vgs():
     '''Returns a list of VG names'''
-    out= subprocess.check_output("/sbin/vgdisplay")
+    out= shell.get().check_output("/sbin/vgdisplay")
     vg_lines= sfilter('VG Name', out)
     vgs= [rsplit(x)[2] for x in vg_lines]
     return vgs
@@ -123,39 +123,39 @@ def create_lv(vg, name, size):
         size= str(size)+"B"
     print "creating LV {name} with size={size}".format(**locals())
     command = ("/sbin/lvcreate", vg, "--name", name, "--size", size)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
 
 def remove_lv(vg, name, force=True):
     print "deleting LV {name}".format(**locals())
     force_flag= ("-f",) if force else ()
     command = ("/sbin/lvremove",) + force_flag + ("{vg}/{name}".format(**locals()),)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
 
 def rename_lv(vg, name, new_name):
     print "renaming LV {name}".format(**locals())
     command= ("/sbin/lvrename", vg, name, new_name)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
  
 def create_pv(device, force=True):
     print "creating PV {device}".format(**locals())
     force_flag= ("-f",) if force else ()
     command= ("/sbin/pvcreate",) + force_flag + (device,)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
 
 def create_vg(name, pvdevice):
     print "creating VG {name} with PV {pvdevice}".format(**locals())
     command = ("/sbin/vgcreate", name, pvdevice)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
 
 def remove_vg(name):
     print "deleting VG {name}".format(**locals())
     command = ("/sbin/vgremove", name)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
 
 def remove_pv(device):
     print "deleting PV {device}".format(**locals())
     command = ("/sbin/pvremove", device)
-    subprocess.check_call(command)
+    shell.get().check_call(command)
 
 def _parse_xxdisplay(output, expected_keys, is_separator_line, name_key, column2_start=24):
     '''Generic parser for output of pvdisplay, vgdisplay and lvdisplay'''
@@ -202,7 +202,7 @@ def _parse_pvdisplay():
     EXPECTED_KEYS = [ 'PV Name', 'VG Name', 'PV Size', 'Allocatable',
         'PE Size', 'Total PE', 'Free PE', 'Allocated PE', 'PV UUID']
     is_separator_line= lambda line: '--- Physical volume ---' in line
-    out= subprocess.check_output("/sbin/pvdisplay")
+    out= shell.get().check_output("/sbin/pvdisplay")
     name_key='PV Name'
     return _parse_xxdisplay(out, EXPECTED_KEYS, is_separator_line, name_key)
 
@@ -212,7 +212,7 @@ def _parse_vgdisplay():
         'Metadata Sequence No', 'Open LV', 'PE Size', 'System ID', 'Total PE',
         'VG Access', 'VG Name', 'VG Size', 'VG Status', 'VG UUID']
     is_separator_line= lambda line: '--- Volume group ---' in line
-    out= subprocess.check_output("/sbin/vgdisplay")
+    out= shell.get().check_output("/sbin/vgdisplay")
     name_key='VG Name'
     return _parse_xxdisplay(out, EXPECTED_KEYS, is_separator_line, name_key)
 
@@ -223,7 +223,7 @@ def _parse_lvdisplay():
             '# open', 'LV Size', 'Current LE', 'Segments', 'Allocation',
             'Read ahead sectors', '- currently set to', 'Block device']
     is_separator_line= lambda line: '--- Logical volume ---' in line
-    out= subprocess.check_output("/sbin/lvdisplay")
+    out= shell.get().check_output("/sbin/lvdisplay")
     name_key='LV Name'
     return _parse_xxdisplay(out, EXPECTED_KEYS, is_separator_line, name_key, column2_start=25)
 

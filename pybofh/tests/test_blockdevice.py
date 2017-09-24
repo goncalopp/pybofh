@@ -5,7 +5,7 @@
 import unittest
 import mock
 import functools
-from pybofh import shell
+from pybofh.shell import MockShell
 from pybofh import blockdevice
 
 # Aux classes for testing -------------------------------------------
@@ -21,16 +21,18 @@ class MockDevice(object):
         if parent:
             parent.child = self
 
-    def execute_command(self, command):
-        '''This mocks pybofh.shell.run_process.
-        It returns None if this MockDevice doesn't want to handle the command'''
-        if not self.path in command:
-            return None
+    def mock_shell_match(self, command):
+        """Whether this MockDevice should execute the mocked command - used in MockShell"""
+        return self.path in command
+
+    def mock_shell_execute(self, command):
+        """Implementation of command execution for MockShell"""
         if command == ('/sbin/blockdev', '--getsize64', self.path):
             return str(self.size)
-        elif command == ('file', '--special', '--dereference', self.path):
+        if command == ('file', '--special', '--dereference', self.path):
             name = self.content.__name__ if callable(self.content) else self.content.__class__.__name__
             return "{}: some data: {}".format(self.path, name)
+        raise Exception("Unhandled mock command: " + command)
 
 class SimpleResizeable(blockdevice.Resizeable):
     GRANULARITY = 29
@@ -181,12 +183,11 @@ class SimpleInnerLayer(blockdevice.InnerLayer):
 blockdevice.register_data_class('SimpleData', SimpleData)
 blockdevice.register_data_class('SimpleOuterLayer', SimpleOuterLayer)
 
-def command_side_effect(command, mock_devices):
+def create_mock_shell(mock_devices):
+    shell = MockShell()
     for md in mock_devices:
-        ret = md.execute_command(command)
-        if ret is not None:
-            return ret
-    return mock.DEFAULT
+        shell.add_mock(md.mock_shell_match, md.mock_shell_execute)
+    return shell
 
 def get_dev_from_path(path, mock_devices):
     for md in mock_devices:
@@ -194,14 +195,15 @@ def get_dev_from_path(path, mock_devices):
             return SimpleBlockDevice(md)
     return SimpleBlockDevice(path)
 
-def generic_setup(mock_devices=()):
+def generic_setup(test_instance, mock_devices=()):
     '''Setups mocks'''
-    side_effect_f = functools.partial(command_side_effect, mock_devices=mock_devices)
+    shell = create_mock_shell(mock_devices)
+    test_instance.shell = shell
     mocklist = [
         {"target": "os.path.isdir"},
         {"target": "os.path.exists"},
         {"target": "pybofh.blockdevice.blockdevice_from_path", "side_effect": lambda path: SimpleBlockDevice(path)},
-        {"target": "pybofh.shell.run_process", "side_effect": side_effect_f},
+        {"target": "pybofh.shell.get", "side_effect": lambda: shell},
         ]
     patches = [mock.patch(autospec=True, **a) for a in mocklist] + \
         [mock.patch('pybofh.blockdevice.blockdevice_from_path', new_callable=lambda : functools.partial(get_dev_from_path, mock_devices=mock_devices))]
@@ -343,7 +345,7 @@ class ParametrizableTest(unittest.TestCase):
 class BlockdeviceTest(unittest.TestCase):
     def setUp(self):
         self.bd = MockDevice('/dev/inexistent', SimpleData)
-        generic_setup((self.bd,))
+        generic_setup(self, (self.bd,))
 
     def tearDown(self):
         mock.patch.stopall()
@@ -355,7 +357,7 @@ class BlockdeviceTest(unittest.TestCase):
     def test_size(self):
         b = blockdevice.BlockDevice(self.bd.path)
         self.assertEquals(b.size, self.bd.size)
-        shell.run_process.assert_called_with(('/sbin/blockdev', '--getsize64', self.bd.path))
+        self.assertEquals(self.shell.run_commands[-1], ('/sbin/blockdev', '--getsize64', self.bd.path))
 
     def test_size_badgranularity(self):
         self.bd.granularity = 10
@@ -374,10 +376,9 @@ class BlockdeviceTest(unittest.TestCase):
 
     def test_data(self):
         b = blockdevice.BlockDevice(self.bd.path)
-        print shell.run_process.call_args_list
         data = b.data
         # getting the data uses file to check the format of content in the blockdevice
-        shell.run_process.assert_any_call(('file', '--special', '--dereference', self.bd.path))
+        self.assertIn(('file', '--special', '--dereference', self.bd.path), self.shell.run_commands)
         self.assertIsInstance(data, SimpleData) # SimpleData is registered in this test file
 
     def test_data_identity(self):
@@ -399,7 +400,7 @@ class BlockdeviceTest(unittest.TestCase):
         with self.assertRaises(blockdevice.Resizeable.ResizeError):
             # Should refuse to resize unless no_data arg is provided
             b.resize(-100, relative=True)
-        self.assertEqual(len(shell.run_process.mock_calls), 0)
+        self.assertEqual(len(self.shell.run_commands), 0)
         with self.assertRaises(NotImplementedError):
             # resize is not implemented for base BlockDevice
             b.resize(-100, relative=True, no_data=True)
@@ -408,7 +409,7 @@ class OuterLayerTest(unittest.TestCase):
     def setUp(self):
         self.l0 = MockDevice('/dev/inexistent_l0', SimpleOuterLayer)
         self.l1 = MockDevice('/dev/inexistent_l1', SimpleData, parent=self.l0)
-        generic_setup((self.l0,))
+        generic_setup(self, (self.l0,))
 
     def tearDown(self):
         mock.patch.stopall()
@@ -434,7 +435,7 @@ class InnerLayerTest(unittest.TestCase):
     def setUp(self):
         self.l0 = MockDevice('/dev/inexistent_l0', SimpleOuterLayer)
         self.l1 = MockDevice('/dev/inexistent_l1', SimpleData, parent=self.l0)
-        generic_setup((self.l0,))
+        generic_setup(self, (self.l0,))
 
     def tearDown(self):
         mock.patch.stopall()
@@ -464,7 +465,7 @@ class BlockDeviceStackTest(unittest.TestCase):
         self.l2 = MockDevice('/dev/inexistent_l2', SimpleData, parent=self.l1)
         devices = [self.l2, self.l1, self.l0]
         device_dict = {d.path: d for d in devices}
-        generic_setup((self.l0, self.l1, self.l2))
+        generic_setup(self, (self.l0, self.l1, self.l2))
         mock.patch('pybofh.blockdevice.InnerLayer._externally_open_data', return_value=None).start()
 
     def tearDown(self):
@@ -621,5 +622,4 @@ class BlockDeviceStackTest(unittest.TestCase):
         
 
 if __name__ == "__main__":
-    from path import path as Path
     unittest.main()

@@ -2,7 +2,7 @@
 
 from pybofh.misc import file_type, lcm
 from pybofh.my_logging import get_logger
-from pybofh import shell as subprocess
+from pybofh import shell
 import os
 import os.path
 import weakref
@@ -563,7 +563,7 @@ def devicemapper_info(device_or_path):
             return x
     path= get_device_path(device_or_path)
     command= ['/sbin/dmsetup', 'info', path]
-    output= subprocess.check_output(command)
+    output= shell.get().check_output(command)
     kv_pairs= re.findall(REGEX, output)
     d= {k: convert_value(v) for k,v in kv_pairs}
     assert set(d.keys()) > set(MIN_KEYS)
@@ -638,7 +638,7 @@ def lsblk():
         maj,min= majmin.split(":")
         return name, maj, min, size, ro, type, mountpoint
     command= ['/bin/lsblk']
-    output= subprocess.check_output(command)
+    output= shell.get().check_output(command)
     output= output.decode('utf-8') #TODO: get system encoding
     #split lines and verify format
     lines= output.splitlines()
@@ -674,7 +674,7 @@ def dm_get_child(blockdevice_path):
 
 def size(blockdevice_path):
     '''return the of the block device in bytes'''
-    return int(subprocess.check_output(('/sbin/blockdev', '--getsize64', blockdevice_path)))
+    return int(shell.get().check_output(('/sbin/blockdev', '--getsize64', blockdevice_path)))
 
 def get_blockdevice_child(path):
         root= lsblk()

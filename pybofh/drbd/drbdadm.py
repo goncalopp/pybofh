@@ -1,45 +1,45 @@
-from pybofh import shell as subprocess
+from pybofh import shell
 
 DRBDADM = "/sbin/drbdadm"
 
 def attach(resource, options=()):
-    subprocess.check_call((DRBDADM, "attach") + options + (resource,))
+    shell.get().check_call((DRBDADM, "attach") + options + (resource,))
 
 def detach(resource, options=()):
-    subprocess.check_call((DRBDADM, "detach") + options + (resource,))
+    shell.get().check_call((DRBDADM, "detach") + options + (resource,))
 
 def connect(resource, options=()):
-    subprocess.check_call((DRBDADM, "connect") + options + (resource,))
+    shell.get().check_call((DRBDADM, "connect") + options + (resource,))
 
 def disconnect(resource, options=()):
-    subprocess.check_call((DRBDADM, "disconnect") + options + (resource,))
+    shell.get().check_call((DRBDADM, "disconnect") + options + (resource,))
 
 def up(resource, options=()):
-    subprocess.check_call((DRBDADM, "up") + options + (resource,))
+    shell.get().check_call((DRBDADM, "up") + options + (resource,))
 
 def down(resource, options=()):
-    subprocess.check_call((DRBDADM, "down") + options + (resource,))
+    shell.get().check_call((DRBDADM, "down") + options + (resource,))
 
 def primary(resource, options=()):
-    subprocess.check_call((DRBDADM, "primary") + options + (resource,))
+    shell.get().check_call((DRBDADM, "primary") + options + (resource,))
 
 def secondary(resource, options=()):
-    subprocess.check_call((DRBDADM, "secondary") + options + (resource,))
+    shell.get().check_call((DRBDADM, "secondary") + options + (resource,))
 
 def invalidate(resource, options=()):
-    subprocess.check_call((DRBDADM, "invalidate") + options + (resource,))
+    shell.get().check_call((DRBDADM, "invalidate") + options + (resource,))
 
 def invalidate_remote(resource, options=()):
-    subprocess.check_call((DRBDADM, "invalidate-remote") + options + (resource,))
+    shell.get().check_call((DRBDADM, "invalidate-remote") + options + (resource,))
 
 def create_md(resource, options=()):
-    subprocess.check_call((DRBDADM, "create-md") + options + (resource,))
+    shell.get().check_call((DRBDADM, "create-md") + options + (resource,))
 
 def adjust(resource, options=()):
-    subprocess.check_call((DRBDADM, "adjust") + options + (resource,))
+    shell.get().check_call((DRBDADM, "adjust") + options + (resource,))
 
 def role(resource, options=()):
-    out= subprocess.check_output((DRBDADM, "role") + options + (resource,))
+    out= shell.get().check_output((DRBDADM, "role") + options + (resource,))
     assert len(out)==1
     out=out[0]
     roles= out.split("/")
@@ -47,13 +47,13 @@ def role(resource, options=()):
     return roles
 
 def cstate(resource, options=()):
-    out= subprocess.check_output((DRBDADM, "cstate") + options + (resource,))
+    out= shell.get().check_output((DRBDADM, "cstate") + options + (resource,))
     assert len(out)==1
     out=out[0]
     return out
 
 def dstate(resource, options=()):
-    out= subprocess.check_output((DRBDADM, "dstate") + options + (resource,))
+    out= shell.get().check_output((DRBDADM, "dstate") + options + (resource,))
     assert len(out)==1
     out=out[0]
     states= out.split("/")
@@ -61,10 +61,10 @@ def dstate(resource, options=()):
     return states
 
 def verify(resource, options=()):
-    subprocess.check_call((DRBDADM, "verify") + options + (resource,))
+    shell.get().check_call((DRBDADM, "verify") + options + (resource,))
 
 def pause_sync(resource, options=()):
-    subprocess.check_call((DRBDADM, "pause-sync") + options + (resource,))
+    shell.get().check_call((DRBDADM, "pause-sync") + options + (resource,))
 
 def resume_sync(resource, options=()):
-    subprocess.check_call((DRBDADM, "resume-sync") + options + (resource,))
+    shell.get().check_call((DRBDADM, "resume-sync") + options + (resource,))
