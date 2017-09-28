@@ -15,7 +15,7 @@ def reverse_operation( f, args, kwargs ):
         return lvm.removeLV, args[:2], {} #vg, lv_name
     raise Exception("Reverse operation not found for "+str(f))
 
-from atomic_operations import AtomicOperationSequence
-Atomic= partial( AtomicOperationSequence, reverse_operation ) 
+from atomic_operations import AtomicContext
+
 settings = settingsmodule.Settings()
-__all__=[ blockdevice, mount, filesystem, btrfs, xen, lvm, drbd, Atomic ]
+__all__=[ blockdevice, mount, filesystem, btrfs, xen, lvm, drbd, AtomicContext ]
