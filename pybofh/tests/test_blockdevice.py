@@ -1,6 +1,9 @@
 '''Tests for mount.py'''
 # pylint: disable=no-member
 # pylint: disable=no-self-use
+# pylint: disable=protected-access
+# pylint: disable=pointless-statement
+# pylint: disable=too-many-public-methods
 
 import unittest
 import mock
@@ -93,13 +96,13 @@ class SimpleBlockDevice(blockdevice.BlockDevice):
         else:
             return blockdevice.BlockDevice.resize_granularity(self)
 
-    def _resize(self, byte_size, minimum, maximum, interactive, **kwargs):
+    def _resize(self, byte_size, minimum, maximum, _, **kwargs):
         if self.mockdevice:
             if minimum or maximum:
                 raise NotImplementedError
             self.mockdevice.size = byte_size
         else:
-            return blockdevice.BlockDevice._resize(self)
+            raise Exception("Not a mock device")
 
 class SimpleData(blockdevice.Data):
     def __init__(self, bd):
@@ -117,9 +120,6 @@ class SimpleData(blockdevice.Data):
 
     def _size(self):
         return self.device.size if self._simple_size is None else self._simple_size
-
-    def _resize(self, byte_size, minimum, maximum, interactive, **kwargs):
-        self._simple_size = byte_size
 
 class SimpleOuterLayer(blockdevice.OuterLayer):
     def __init__(self, bd):
@@ -144,7 +144,7 @@ class SimpleOuterLayer(blockdevice.OuterLayer):
             overhead = old_size - self.inner.mockdevice.size
             self.inner.mockdevice.size = new_size - overhead
         else:
-            raise Exception("SimpleOuterLayer has invalid resize_overhead: " + seld.resize_overhead)
+            raise Exception("SimpleOuterLayer has invalid resize_overhead: " + self.resize_overhead)
 
 
     @property
@@ -159,17 +159,18 @@ class SimpleInnerLayer(blockdevice.InnerLayer):
     def __init__(self, outer_layer, **kwargs):
         blockdevice.InnerLayer.__init__(self, outer_layer, **kwargs)
         self._simple_size = outer_layer.size
-        obd = outer_layer.device
         self.mockdevice = outer_layer.device.mockdevice.child
+        self.outer_layer = outer_layer
 
     def _close(self):
         pass
 
-    def _open(self, **kwargs):
+    def _open(self, **_):
         return self.mockdevice.path
 
     def _resize(self, byte_size, minimum, maximum, interactive, **kwargs):
-        raise NotImplementedError
+        byte_size = byte_size + (self.outer_layer.size - self.size) if byte_size is not None else None
+        self.outer_layer._resize(byte_size, minimum, maximum, interactive)
 
     @property
     def resize_granularity(self):
@@ -177,9 +178,9 @@ class SimpleInnerLayer(blockdevice.InnerLayer):
 
     def _size(self):
         return self.mockdevice.size
-    
+
 # Module level constants / vars / code  --------------------------------------
- 
+
 blockdevice.register_data_class('SimpleData', SimpleData)
 blockdevice.register_data_class('SimpleOuterLayer', SimpleOuterLayer)
 
@@ -197,6 +198,7 @@ def get_dev_from_path(path, mock_devices):
 
 def generic_setup(test_instance, mock_devices=()):
     '''Setups mocks'''
+    # pylint: disable=unnecessary-lambda, star-args
     shell = create_mock_shell(mock_devices)
     test_instance.shell = shell
     mocklist = [
@@ -206,7 +208,7 @@ def generic_setup(test_instance, mock_devices=()):
         {"target": "pybofh.shell.get", "side_effect": lambda: shell},
         ]
     patches = [mock.patch(autospec=True, **a) for a in mocklist] + \
-        [mock.patch('pybofh.blockdevice.blockdevice_from_path', new_callable=lambda : functools.partial(get_dev_from_path, mock_devices=mock_devices))]
+        [mock.patch('pybofh.blockdevice.blockdevice_from_path', new_callable=lambda: functools.partial(get_dev_from_path, mock_devices=mock_devices))]
     for patch in patches:
         patch.start()
 
@@ -313,14 +315,14 @@ class OpenableTest(unittest.TestCase):
         r._on_open = mock.Mock(r._on_open)
         self.assertFalse(r.is_externally_open)
         r.open()
-        r._on_open.assert_called_with('xyz',True) # a true open
+        r._on_open.assert_called_with('xyz', True) # a true open
         # open when externally open
         r = SimpleOpenable(externally_open_data='xyz')
         r._on_open = mock.Mock(r._on_open)
         self.assertTrue(r.is_externally_open)
         self.assertFalse(r.is_open) # Externally open doesn't count as open
         r.open()
-        r._on_open.assert_called_with('xyz',False) # a fake open
+        r._on_open.assert_called_with('xyz', False) # a fake open
         self.assertTrue(r.is_open) # Externally open doesn't count as open
 
 class ParametrizableTest(unittest.TestCase):
@@ -450,6 +452,7 @@ class InnerLayerTest(unittest.TestCase):
         self.assertTrue(inner.outer is ol.data)
 
     def test_is_externally_open(self):
+        # pylint: disable=maybe-no-member
         ol = blockdevice.blockdevice(self.l0.path)
         inner = ol.data.inner
         patch = mock.patch('pybofh.blockdevice.InnerLayer._externally_open_data', return_value=None).start()
@@ -463,8 +466,6 @@ class BlockDeviceStackTest(unittest.TestCase):
         self.l0 = MockDevice('/dev/inexistent_l0', SimpleOuterLayer)
         self.l1 = MockDevice('/dev/inexistent_l1', SimpleOuterLayer, parent=self.l0)
         self.l2 = MockDevice('/dev/inexistent_l2', SimpleData, parent=self.l1)
-        devices = [self.l2, self.l1, self.l0]
-        device_dict = {d.path: d for d in devices}
         generic_setup(self, (self.l0, self.l1, self.l2))
         mock.patch('pybofh.blockdevice.InnerLayer._externally_open_data', return_value=None).start()
 
@@ -494,7 +495,7 @@ class BlockDeviceStackTest(unittest.TestCase):
         st = blockdevice.BlockDeviceStack(self.l0.path)
         self.assertEquals(st.outermost.path, self.l0.path)
         with self.assertRaises(blockdevice.NotReady):
-             st.innermost
+            st.innermost
         with st:
             self.assertEquals(st.outermost.path, self.l0.path)
             self.assertEquals(st.innermost.path, self.l2.path)
@@ -548,14 +549,14 @@ class BlockDeviceStackTest(unittest.TestCase):
         self.l1.size = 100
         self.l2.size = 100
         self.l0.granularity = 5
-        self.l1.granularit = 5
+        self.l1.granularity = 5
         self.l2.granularity = 5
         st = blockdevice.BlockDeviceStack(self.l0.path)
         with st:
             self.assertItemsEqual(st.layer_and_data_sizes(), [100]*6)
             st.resize(200)
             self.assertItemsEqual(st.layer_and_data_sizes(), [200]*6)
- 
+
     def test_resize_up_granularitymix_overhead0(self):
         self.l0.size = 385
         self.l1.size = 385
@@ -568,7 +569,7 @@ class BlockDeviceStackTest(unittest.TestCase):
             self.assertItemsEqual(st.layer_and_data_sizes(), [385]*6)
             st.resize(1000)
             self.assertItemsEqual(st.layer_and_data_sizes(), [1155]*6)
- 
+
     def test_resize_up_granularity1_overhead1(self):
         self.l0.size = 100
         self.l1.size = 99
@@ -587,7 +588,7 @@ class BlockDeviceStackTest(unittest.TestCase):
         self.l1.size = 95
         self.l2.size = 90
         self.l0.granularity = 1
-        self.l1.granularit = 1
+        self.l1.granularity = 1
         self.l2.granularity = 1
         st = blockdevice.BlockDeviceStack(self.l0.path)
         with st:
@@ -608,8 +609,83 @@ class BlockDeviceStackTest(unittest.TestCase):
             st.resize(1000)
             self.assertEqual(list(st.layer_and_data_sizes()), [1000, 1000, 995, 995, 980, 980])
 
+    def test_resize_down_granularity1_overhead0(self):
+        self.l0.size = 100
+        self.l1.size = 100
+        self.l2.size = 100
+        self.l0.granularity = 1
+        self.l1.granularity = 1
+        self.l2.granularity = 1
+        st = blockdevice.BlockDeviceStack(self.l0.path)
+        with st:
+            self.assertItemsEqual(st.layer_and_data_sizes(), [100]*6)
+            st.resize(50)
+            self.assertItemsEqual(st.layer_and_data_sizes(), [50]*6)
 
+    def test_resize_down_granularity5_overhead0(self):
+        self.l0.size = 100
+        self.l1.size = 100
+        self.l2.size = 100
+        self.l0.granularity = 5
+        self.l1.granularity = 5
+        self.l2.granularity = 5
+        st = blockdevice.BlockDeviceStack(self.l0.path)
+        with st:
+            self.assertItemsEqual(st.layer_and_data_sizes(), [100]*6)
+            st.resize(50)
+            self.assertItemsEqual(st.layer_and_data_sizes(), [50]*6)
 
+    def test_resize_down_granularitymix_overhead0(self):
+        self.l0.size = 1155
+        self.l1.size = 1155
+        self.l2.size = 1155
+        self.l0.granularity = 5
+        self.l1.granularity = 7
+        self.l2.granularity = 11
+        st = blockdevice.BlockDeviceStack(self.l0.path)
+        with st:
+            self.assertItemsEqual(st.layer_and_data_sizes(), [1155]*6)
+            st.resize(100)
+            self.assertItemsEqual(st.layer_and_data_sizes(), [385]*6)
+
+    def test_resize_down_granularity1_overhead1(self):
+        self.l0.size = 100
+        self.l1.size = 99
+        self.l2.size = 98
+        self.l0.granularity = 1
+        self.l1.granularity = 1
+        self.l2.granularity = 1
+        st = blockdevice.BlockDeviceStack(self.l0.path)
+        with st:
+            self.assertEqual(list(st.layer_and_data_sizes()), [100, 100, 99, 99, 98, 98])
+            st.resize(50)
+            self.assertEqual(list(st.layer_and_data_sizes()), [50, 50, 49, 49, 48, 48])
+
+    def test_resize_down_granularity1_overhead5(self):
+        self.l0.size = 100
+        self.l1.size = 95
+        self.l2.size = 90
+        self.l0.granularity = 1
+        self.l1.granularity = 1
+        self.l2.granularity = 1
+        st = blockdevice.BlockDeviceStack(self.l0.path)
+        with st:
+            self.assertEqual(list(st.layer_and_data_sizes()), [100, 100, 95, 95, 90, 90])
+            st.resize(50)
+            self.assertEqual(list(st.layer_and_data_sizes()), [50, 50, 45, 45, 40, 40])
+
+    def test_resize_down_granularitymix_overhead5(self):
+        self.l0.size = 400
+        self.l1.size = 395
+        self.l2.size = 380
+        self.l0.granularity = 2
+        self.l1.granularity = 5
+        self.l2.granularity = 20
+        st = blockdevice.BlockDeviceStack(self.l0.path)
+        with st:
+            self.assertEqual(list(st.layer_and_data_sizes()), [400, 400, 395, 395, 380, 380])
+            st.resize(200)
+            self.assertEqual(list(st.layer_and_data_sizes()), [200, 200, 195, 195, 180, 180])
 
     def test_layer_and_data_sizes(self):
         self.l0.size = 3
@@ -618,8 +694,8 @@ class BlockDeviceStackTest(unittest.TestCase):
         st = blockdevice.BlockDeviceStack(self.l0.path)
         with st:
             sizes = st.layer_and_data_sizes()
-            self.assertItemsEqual(sizes, [3,3,2,2,1,1])
-        
+            self.assertItemsEqual(sizes, [3, 3, 2, 2, 1, 1])
+
 
 if __name__ == "__main__":
     unittest.main()

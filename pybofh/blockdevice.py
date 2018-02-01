@@ -70,15 +70,6 @@ class Resizeable(object):
         Example: block size'''
         pass
 
-    def _round_to_granularity(self, n, round_up=True):
-        gr= self.resize_granularity
-        exact= n % gr == 0
-        divs= int(n / self.resize_granularity)
-        if round_up and not exact:
-            divs+=1
-        rec= divs * gr
-        return rec
-
     def _process_resize_size(self, byte_size=None, relative=False, approximate=True, round_up=True):
         if relative:
             byte_size+= self.size
