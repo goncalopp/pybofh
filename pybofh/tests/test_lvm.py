@@ -76,8 +76,8 @@ def command_side_effect(command):
 def generic_setup(test_instance):
     '''Setups mocks'''
     test_instance.shell = shell = MockShell()
-    shell.add_mock(('/sbin/vgdisplay'), VGDISPLAY_DATA)
-    shell.add_mock(('/sbin/lvdisplay'), LVDISPLAY_DATA)
+    shell.add_mock('/sbin/vgdisplay', VGDISPLAY_DATA)
+    shell.add_mock('/sbin/lvdisplay', LVDISPLAY_DATA)
     shell.add_mock(lambda _: True, mock.DEFAULT) # catch-all
     mocklist = [
         {"target": "os.path.isdir"},
@@ -131,7 +131,7 @@ class VGTest(unittest.TestCase):
     def test_get_lvs(self):
         vg = lvm.VG(VG)
         lvs = vg.get_lvs()
-        self.assertIn(('/sbin/lvdisplay'), self.shell.run_commands)
+        self.assertIn(('/sbin/lvdisplay',), self.shell.run_commands)
         self.assertEqual(len(lvs), 1)
         self.assertIsInstance(lvs[0], lvm.LV)
         self.assertEqual(lvs[0].name, LV)
@@ -146,7 +146,7 @@ class VGTest(unittest.TestCase):
     def test_lv(self):
         vg = lvm.VG(VG)
         lv = vg.lv(LV)
-        self.assertIn(('/sbin/lvdisplay'), self.shell.run_commands)
+        self.assertIn(('/sbin/lvdisplay',), self.shell.run_commands)
         self.assertIsInstance(lv, lvm.LV)
         self.assertEqual(lv.name, LV)
 
@@ -164,7 +164,7 @@ class LVTest(unittest.TestCase):
 
     def test_init(self):
         lv = lvm.LV(VG, LV)
-        self.assertIn(('/sbin/lvdisplay'), self.shell.run_commands)
+        self.assertIn(('/sbin/lvdisplay',), self.shell.run_commands)
         self.assertIsInstance(lv, lvm.LV)
         self.assertEqual(lv.name, LV)
 
@@ -193,13 +193,13 @@ class ModuleFunctionsTest(unittest.TestCase):
 
     def test_get_vgs(self):
         vgs = lvm.get_vgs()
-        self.assertIn(('/sbin/vgdisplay'), self.shell.run_commands)
+        self.assertIn(('/sbin/vgdisplay',), self.shell.run_commands)
         self.assertEqual(len(vgs), 1)
         self.assertItemsEqual(vgs, [VG])
 
     def test_get_lvs(self):
         lvs = lvm.get_lvs(VG)
-        self.assertIn(('/sbin/lvdisplay'), self.shell.run_commands)
+        self.assertIn(('/sbin/lvdisplay',), self.shell.run_commands)
         self.assertEqual(len(lvs), 1)
         self.assertItemsEqual(lvs, [LV])
 

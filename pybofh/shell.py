@@ -15,14 +15,20 @@ class Shell(object):
         """Executes the command, and ensures it doesn't return a error. Returns the output"""
         return self.run_process(command)
 
-    @abstractmethod
     def run_process(self, command):
         """Executes the command, and ensures it doesn't return a error. Returns the output"""
+        if isinstance(command, (str, unicode)):
+            command = (command,)
+        else:
+            command = tuple(command)
+        logging.debug("Running command: %s", lambda: "".join(command))
+        return self._run_process(command)
+
+    def _run_process(self, command):
         raise NotImplementedError
 
 class SystemShell(Shell):
-    def run_process(self, command):
-        logging.debug("Running command: %s", lambda: "".join(command))
+    def _run_process(self, command):
         result = subprocess.check_output(command)
         return result
 
@@ -41,6 +47,12 @@ class MockShell(Shell):
         If it's a string, it's interpreted as the literal command response.
         If it's a callable, it should take a single argument (the command) and return the response (string).
         """
+        if isinstance(command, str):
+            command = (command,)
+        elif callable(command):
+            pass
+        else:
+            command = tuple(command)
         self._mocks.append((command, response))
 
     def _get_mock_response(self, command):
@@ -50,7 +62,8 @@ class MockShell(Shell):
                 return mock_response(command) if callable(mock_response) else mock_response
         raise Exception("No mock response found for {}".format(command))
 
-    def run_process(self, command):
+    def _run_process(self, command):
+        assert not isinstance(command, str)
         return self._get_mock_response(command)
 
 shell = SystemShell() # singleton
