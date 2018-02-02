@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 '''Tests for mount.py'''
 # pylint: disable=no-member
 # pylint: disable=no-self-use
@@ -11,6 +13,35 @@ import functools
 from pybofh.shell import MockShell
 from pybofh import blockdevice
 
+LSBLK_DATA = """NAME                                MAJ:MIN RM  SIZE RO TYPE  MOUNTPOINT
+sda                                   8:0    0  2.7T  0 disk  
+├─sda1                                8:1    0  1.8T  0 part  
+│ └─md0                               9:0    0  1.8T  0 raid1 
+│   ├─md0p1                         259:0    0   32G  0 md    
+│   │ ├─vg01-something00            254:14   0    8G  0 lvm   
+│   │ ├─vg01-something01            254:16   0    2G  0 lvm   
+│   │ │ └─something001              254:26   0    2G  0 crypt 
+│   │ └─vg01-something02            254:17   0    1G  0 lvm   
+│   └─md0p2                         259:1    0  1.5T  0 md    
+│     ├─vg02-something03            254:1    0    5G  0 lvm   
+└─sda2                                8:2    0    8G  0 part  
+sdb                                   8:32   1  7.5G  0 disk  
+├─sdb1                                8:33   1  121M  0 part  /home
+└─sdb5                                8:37   1  2.8G  0 part  
+  └─vg03-something04                254:0    0  2.8G  0 lvm   /media/something4
+"""
+
+DMSETUP_INFO_DATA = """Name:              vg01-lv01
+State:             ACTIVE
+Read Ahead:        256
+Tables present:    LIVE
+Open count:        1
+Event number:      0
+Major, minor:      253, 3
+Number of targets: 3
+UUID: LVM-0bIWK7rs4OtKBT3YAk9qJpnSa19Yj4pbAR5j79MUV5HFIst4JF0McYNuq9avYXBC
+
+"""
 # Aux classes for testing -------------------------------------------
 
 class MockDevice(object):
@@ -188,6 +219,9 @@ def create_mock_shell(mock_devices):
     shell = MockShell()
     for md in mock_devices:
         shell.add_mock(md.mock_shell_match, md.mock_shell_execute)
+    shell.add_mock('/bin/lsblk', LSBLK_DATA)
+    shell.add_mock(('/sbin/dmsetup', 'info', '/dev/mapper/vg01-lv01'), DMSETUP_INFO_DATA)
+
     return shell
 
 def get_dev_from_path(path, mock_devices):
@@ -695,6 +729,41 @@ class BlockDeviceStackTest(unittest.TestCase):
         with st:
             sizes = st.layer_and_data_sizes()
             self.assertItemsEqual(sizes, [3, 3, 2, 2, 1, 1])
+
+
+class ModuleTest(unittest.TestCase):
+    def setUp(self):
+        generic_setup(self)
+
+    def tearDown(self):
+        mock.patch.stopall()
+
+    def test_lsblk(self):
+        node = blockdevice.lsblk()
+        self.assertEqual(len(node.children), 2)
+        self.assertEqual(node.parent, None)
+        self.assertEqual(node.children[0].parent, node)
+        nodes = list(node.iterate())
+        self.assertEqual(len(nodes), 15 + 1)
+
+        node1 = node.find_node('vg01-something01')
+        self.assertEqual(node1.name, 'vg01-something01')
+        self.assertEqual(node1.major, 254)
+        self.assertEqual(node1.minor, 16)
+        self.assertEqual(node1.size, '2G')
+        self.assertEqual(node1.type, 'lvm')
+        self.assertEqual(node1.mountpoint, None)
+        self.assertEqual(node1.ro, False)
+
+        node2 = node.find_node('sdb1')
+        self.assertEqual(node2.mountpoint, '/home')
+
+    def test_devicemapper_info(self):
+        info = blockdevice.devicemapper_info('/dev/mapper/vg01-lv01')
+        self.assertEqual(info['Major, minor'], '253, 3')
+        self.assertEqual(info['Name'], 'vg01-lv01')
+        self.assertEqual(info['UUID'], 'LVM-0bIWK7rs4OtKBT3YAk9qJpnSa19Yj4pbAR5j79MUV5HFIst4JF0McYNuq9avYXBC')
+        self.assertEqual(info['Open count'], 1)
 
 
 if __name__ == "__main__":
