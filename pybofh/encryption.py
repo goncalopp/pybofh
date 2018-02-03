@@ -1,15 +1,15 @@
 import struct
-from pybofh import shell
 import os, os.path
 import time
+import logging
 from cli import python_cli
+from pybofh import shell
 from pybofh.site_specific import decrypted_path
-from pybofh.my_logging import get_logger
 from pybofh import blockdevice
 
 LUKS_SECTOR_SIZE= 512 #this seems hardcoded into luks, so hopefully it's safe to keep it there
 
-log = get_logger(__name__)
+log = logging.getLogger(__name__)
 
 class Encrypted(blockdevice.OuterLayer, blockdevice.Parametrizable):
     def __init__(self, bd, **kwargs):

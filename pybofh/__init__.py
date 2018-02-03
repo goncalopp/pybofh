@@ -1,6 +1,5 @@
 from functools import partial
 
-import my_logging as logging
 import blockdevice
 import mount
 import filesystem

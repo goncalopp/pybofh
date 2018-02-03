@@ -1,18 +1,18 @@
 # -*- encoding: utf-8 -*-
 
 from pybofh.misc import file_type, lcm
-from pybofh.my_logging import get_logger
 from pybofh import shell
 import os
 import os.path
 import weakref
 from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import partial
+import logging
 import re
 
 DM_DIR = '/dev/mapper/'
 
-log = get_logger(__name__)
+log = logging.getLogger(__name__)
 
 #this is a lit of 2-tuples that is used for other modules to be able to register Data subclasses.
 #each key (first tuple element) is a function that takes the block device instance and returns True iff the data of that block device can
