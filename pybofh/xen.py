@@ -10,7 +10,6 @@ import lvm
 from mount import mount, unmount
 import encryption
 from site_specific import getDomuConfigFile, getDomuDiskMountpoint, getAllDomuNames
-from cli import python_cli
 
 class DomuDisk(object):
     def __init__(self, protocol, device, domu_device, access):
@@ -151,6 +150,3 @@ def unmountDomuDisks( domu_vg, domu, mountpoint ):
             m= os.path.join(mountpoint, dm[1:])
             print "unmounting "+d+" on "+m 
             unmount(m)
-
-if __name__=="__main__":
-    python_cli(globals().values())

@@ -1,7 +1,6 @@
 #!/usr/bin/python
 import os
 import pybofh.shell as shell
-from cli import python_cli
 
 class Mounted(object):
     '''A class that represents a mounted file.
@@ -104,6 +103,3 @@ def create_filesystem(path, fs="btrfs", options=()):
     options= " ".join(options) 
     command=("/sbin/mkfs.{}".format(fs)) + options +(path,)
     shell.get().check_call(command)
-
-if __name__=="__main__":
-    python_cli(globals().values())

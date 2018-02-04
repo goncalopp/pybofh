@@ -109,6 +109,3 @@ def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/med
     open(os.path.join(mountpoint, "etc","anacrontab"), "a").write( anacron_string )
 
 #------------------------------------------------------------------------------------------------
-
-if __name__=="__main__":
-    python_cli(globals().values())

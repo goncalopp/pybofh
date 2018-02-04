@@ -2,7 +2,6 @@ import struct
 import os, os.path
 import time
 import logging
-from cli import python_cli
 from pybofh import shell
 from pybofh.site_specific import decrypted_path
 from pybofh import blockdevice
@@ -144,6 +143,3 @@ def luks_data_offset( blockdevice ):
     return offset
 
 blockdevice.register_data_class( "LUKS", Encrypted )
-
-if __name__=="__main__":
-    python_cli([create_encrypted, open_encrypted, close_encrypted])
