@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-'''Tests for mount.py'''
+'''Tests for blockdevice.py'''
 # pylint: disable=no-member
 # pylint: disable=no-self-use
 # pylint: disable=protected-access
