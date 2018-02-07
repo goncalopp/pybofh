@@ -8,6 +8,7 @@ from pybofh.shell import MockShell
 from pybofh import xen
 from pybofh import settings
 
+DOMUS_CFGS = ["domu1.cfg"]
 XL_LIST_DATA = """Name                                        ID   Mem VCPUs    State   Time(s)
 Domain-0                                     0  5301     2     r-----   72726.8
 domu1                                        1   256     1     -b----  106502.6
@@ -18,8 +19,11 @@ domu3                                        3   128     1     -b----    6917.9
 class Environment(object):
     def xl(self, command):
         assert command[0] == xen.XL
-        if command[1] == 'list':
+        c1 = command[1]
+        if c1 == 'list':
             return XL_LIST_DATA
+        elif c1 == 'create':
+            return ''
         else:
             raise NotImplementedError(str(command))
 
@@ -28,9 +32,20 @@ def create_mock_shell(env):
     shell.add_mock_binary(xen.XL, env.xl)
     return shell
 
+def generic_setup(testcase):
+    testcase.env = Environment()
+    testcase.shell = create_mock_shell(testcase.env)
+    mocklist = [
+        {"target": "pybofh.shell.get", "side_effect": lambda: testcase.shell},
+    ]
+    mock.patch("pybofh.xen.all_domus_configs_files", new=lambda: [resource_stream('pybofh.tests', cfg) for cfg in DOMUS_CFGS]).start()
+    patches = [mock.patch(autospec=True, **a) for a in mocklist]
+    for patch in patches:
+        patch.start()
+
 class DomuConfigTest(unittest.TestCase):
     def setUp(self):
-        self.f = resource_stream('pybofh.tests', 'domu1.cfg')
+        self.f = resource_stream('pybofh.tests', DOMUS_CFGS[0])
 
     def test_init(self):
         c = xen.DomuConfig(self.f)
@@ -61,13 +76,19 @@ class DomuConfigTest(unittest.TestCase):
 
     def test_memory(self):
         c = xen.DomuConfig(self.f)
-        self.assertEqual(c.memory, 1024)
+        self.assertEqual(c.memory, 256)
 
     def test_name(self):
         c = xen.DomuConfig(self.f)
         self.assertEqual(c.name, 'domu1')
 
 class DomuTest(unittest.TestCase):
+    def setUp(self):
+        generic_setup(self)
+
+    def tearDown(self):
+        mock.patch.stopall()
+
     def test_init(self):
         domu = xen.Domu("random_name")
         self.assertIsInstance(domu, xen.Domu)
@@ -76,25 +97,17 @@ class DomuTest(unittest.TestCase):
         domu = xen.Domu("random_name")
         with self.assertRaises(xen.NoDomuConfig):
             _ = domu.config
-        # TODO: implement test with actual config
+        domu = xen.Domu("domu1")
+        self.assertIsInstance(domu.config, xen.DomuConfig)
 
     def test_start(self):
-        domu = xen.Domu("random_name")
-        with self.assertRaises(xen.NoDomuConfig):
-            domu.start()
-        # TODO: implement test for actual start (with config)
-
+        domu = xen.Domu("domu1")
+        domu.start()
+        self.assertEqual(self.shell.run_commands[-1], (xen.XL, 'create', "domu1"))
 
 class ModuleTest(unittest.TestCase):
     def setUp(self):
-        self.env = Environment()
-        self.shell = create_mock_shell(self.env)
-        mocklist = [
-            {"target": "pybofh.shell.get", "side_effect": lambda: self.shell},
-        ]
-        patches = [mock.patch(autospec=True, **a) for a in mocklist]
-        for patch in patches:
-            patch.start()
+        generic_setup(self)
 
     def tearDown(self):
         mock.patch.stopall()
@@ -108,13 +121,13 @@ class ModuleTest(unittest.TestCase):
         l = xen.running_domus_names()
         self.assertEqual(l, ['domu1', 'domu2', 'domu3'])
 
-    def test_all_domus_configs(self):
+    def test_all_domus_configs_filepaths(self):
         with mock.patch('os.listdir', return_value=['domu.cfg', 'unrelated.txt']):
             with settings.for_('xen').change(domu_config_dirs=[]):
-                l = xen.all_domus_configs()
+                l = xen._all_domus_configs_filepaths()
                 self.assertEqual(l, [])
             with settings.for_('xen').change(domu_config_dirs=['/a', '/b']):
-                l = xen.all_domus_configs()
+                l = xen._all_domus_configs_filepaths()
                 self.assertEqual(l, ['/a/domu.cfg', '/b/domu.cfg'])
 
 

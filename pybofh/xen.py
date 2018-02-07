@@ -117,7 +117,7 @@ class Domu(object):
 
     def sanity_check(self):
         try:
-            n1, n2 = self.name, self.config.getName()
+            n1, n2 = self.name, self.config.name
             if n1 != n2:
                 raise Exception("Domu configured name mismatch: {},{}".format(n1, n2))
         except NoDomuConfig:
@@ -125,8 +125,7 @@ class Domu(object):
 
     def start(self):
         log.info("Starting domu {domu}".format(domu=self))
-        cf = self.config.filename
-        command = (XL, "create", cf)
+        command = (XL, "create", self.config.name)
         shell.get().check_call(command)
 
     @property
@@ -146,13 +145,25 @@ def running_domus_names():
 def running_domus():
     return map(Domu, running_domus_names())
 
-def all_domus_configs():
+def _all_domus_configs_filepaths():
     cfg_dirs = settings.get("domu_config_dirs", DEFAULT_CFG_DIRS)
     assert isinstance(cfg_dirs, list)
     all_files = [os.path.join(d, f) for d in cfg_dirs for f in os.listdir(d)]
     cfg_files = [f for f in all_files if f.endswith(CFG_EXT)]
     return cfg_files
 
+def all_domus_configs_files():
+    """Returns a list with opened files of all domu configs found in the domu_config_dirs"""
+    return [open(f) for f in _all_domus_configs_filepaths()]
+
+def all_domus_configs():
+    files = all_domus_configs_files()
+    return map(DomuConfig, files)
+
 def get_domu_config(domu_name):
-    # TODO: implement this
+    configs = all_domus_configs()
+    # TODO: make this more efficient using heuristics on file.name, if present
+    for c in configs:
+        if c.name == domu_name:
+            return c
     raise NoDomuConfig(domu_name)

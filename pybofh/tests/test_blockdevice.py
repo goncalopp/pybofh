@@ -240,7 +240,7 @@ def generic_setup(test_instance, mock_devices=()):
         {"target": "pybofh.shell.get", "side_effect": lambda: shell},
         ]
     patches = [mock.patch(autospec=True, **a) for a in mocklist] + \
-        [mock.patch('pybofh.blockdevice.blockdevice_from_path', new_callable=lambda: functools.partial(get_dev_from_path, mock_devices=mock_devices))]
+        [mock.patch('pybofh.blockdevice.blockdevice_from_path', new=functools.partial(get_dev_from_path, mock_devices=mock_devices))]
     for patch in patches:
         patch.start()
 
