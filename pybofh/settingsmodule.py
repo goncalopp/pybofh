@@ -102,51 +102,58 @@ class Definitions(object):
     def __iter__(self):
         return iter(sorted(self._defs))
 
+class FrozenDict(dict):
+    """A immutable dictionary"""
+    def __setitem__(self, k, v):
+        raise Exception("Can't change values of FrozenDict")
 
-class Values(object):
-    """A Values instance holds concrete values for settings.
-    Values are immutable. They cannot be modified after the creation of the Values instance.
-    If existing is specified, a copy of a existing Settings instance is returned.
-    updated_values is a optional {key: value} that contains values to be change from existing.
+    def pop(self, _):
+        raise Exception("Can't change values of FrozenDict")
+
+    def popitem(self, _):
+        raise Exception("Can't change values of FrozenDict")
+
+    def update(self, _):
+        raise Exception("Can't change values of FrozenDict")
+
+    @classmethod
+    def merge(cls, a, b):
+        """Merges two FrozeDict. Similar to update(), but returns new instance"""
+        x = {}
+        x.update(a)
+        x.update(b)
+        return cls(x)
+
+class Values(FrozenDict):
+    pass
+
+class ValuesPointer(object):
+    """A ValuesPointer points to a Values instance.
+
+    This indirection is needed so several Settings instances (with potentially
+    different resolvers / scopes) share the same ValuesPointer, such that one
+    instance's values are updated, all of the other instances share that update.
     """
-    def __init__(self, defs, values=None):
-        assert isinstance(defs, Definitions)
-        self.defs = defs
-        self._values = {}
-        if values:
-            self.defs.enforce_defined(values)
-            self._values.update(values)
+    def __init__(self):
+        self.values = Values()
 
-    def update(self, updated_values, defs=None):
-        """Constructor for a new Settings() based on existing_settings but with
-        updated values
-        """
-        assert isinstance(updated_values, dict)
-        defs = defs or self.defs
-        values = {}
-        values.update(self._values)
-        values.update(updated_values)
-        return Values(defs, values)
-
-    def get(self, key, default=None):
-        self.defs.enforce_defined(key)
-        return self._values.get(key, default)
-
-    def __getitem__(self, key):
-        self.defs.enforce_defined(key)
-        return self._values[key]
-
+    def swap(self, new_values):
+        assert isinstance(new_values, Values)
+        old = self.values
+        self.values = new_values
+        return old
 
 class Settings(object):
     """A container for settings definitions and values.
 
     The values instance is immutable, and the reference to it can be modified exclusively through a context manager.
     """
-    def __init__(self, defs=None, values=None, resolver=None):
+    def __init__(self, defs=None, valuesptr=None, resolver=None):
         self._defs = defs or Definitions()
-        self._values = values or Values(self._defs)
+        self._valuesptr = valuesptr or ValuesPointer()
         self.resolver = resolver or Resolver()
-        assert self._values.defs is self._defs
+        for v in self._valuesptr.values:
+            self._defs.enforce_defined(v)
 
     def get(self, name, default=None):
         """Gets the value of a setting.
@@ -155,7 +162,8 @@ class Settings(object):
         To get without a default, use __getitem__.
         """
         key = self.resolver.name_to_key(name)
-        return self._values.get(key, default)
+        self._defs.enforce_defined(key)
+        return self._valuesptr.values.get(key, default)
 
     def __getitem__(self, name):
         """Gets the value of a setting.
@@ -163,7 +171,8 @@ class Settings(object):
         If the setting has no value, raises KeyError.
         """
         key = self.resolver.name_to_key(name)
-        return self._values[key]
+        self._defs.enforce_defined(key)
+        return self._valuesptr.values[key]
 
     def __iter__(self):
         l = self.resolver.key_to_name(list(self._defs), ignore_mismatches=True)
@@ -174,9 +183,24 @@ class Settings(object):
         key = self.resolver.name_to_key(name)
         self._defs.add(key, description)
 
+    def _qualify_new_values(self, values):
+        if not isinstance(values, Values):
+            # scope the dict keys to this resolver
+            values = Values(self.resolver.name_to_key(values))
+        for v in values:
+            self._defs.enforce_defined(v)
+        return values
+
     def _set_values(self, values):
-        """Used exclusively by SettingsMutation"""
-        self._values = values
+        """Sets the settings values. Returns the old ones"""
+        values = self._qualify_new_values(values)
+        return self._valuesptr.swap(values)
+
+    def _update_values(self, values):
+        """Updates (merges) the settings values. Returns the old ones"""
+        values = self._qualify_new_values(values)
+        old = self._valuesptr.values
+        return self._valuesptr.swap(Values.merge(old, values))
 
     def for_(self, prefix):
         """Returns a new Settings object that represents a view over these settings,
@@ -184,14 +208,13 @@ class Settings(object):
         Example: settings.for_("prefix").get("a") is equivalent to settings.get("prefix.a").
         """
         resolver = self.resolver.for_(prefix)
-        return Settings(defs=self._defs, values=self._values, resolver=resolver)
+        return Settings(defs=self._defs, valuesptr=self._valuesptr, resolver=resolver)
 
     def values(self, **kwargs):
         """Returns a context manager that mutates the given values.
         The values are changed only while the context manager is opened.
         """
         return SettingsMutation(self, kwargs)
-
 
 class SettingsMutation(object):
     """Context Manager for changing settings"""
@@ -201,11 +224,10 @@ class SettingsMutation(object):
         self.old_values = None
 
     def __enter__(self):
-        self.old_values = self.settings._values # pylint: disable=protected-access
-        updates = self.settings.resolver.name_to_key(self.updates)
-        new_values = self.old_values.update(updates)
-        self.settings._set_values(new_values) # pylint: disable=protected-access
+        # pylint: disable=protected-access
+        self.old_values = self.settings._update_values(self.updates)
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        self.settings._set_values(self.old_values) # pylint: disable=protected-access
+        # pylint: disable=protected-access
+        self.settings._set_values(self.old_values)

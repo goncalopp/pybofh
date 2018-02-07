@@ -3,7 +3,7 @@
 # pylint: disable=pointless-statement, protected-access
 
 import unittest
-from pybofh.settingsmodule import Values, Settings, SettingsMutation, DuplicateError, UndefinedError, Resolver, Definitions
+from pybofh.settingsmodule import Settings, SettingsMutation, DuplicateError, UndefinedError, Resolver, Definitions
 
 class ResolverTest(unittest.TestCase):
     def test_name_to_key(self):
@@ -86,46 +86,6 @@ class DefinitionsTest(unittest.TestCase):
         self.assertEqual(list(defs), ['a', 'b', 'c']) # sorted
 
 
-class ValuesTest(unittest.TestCase):
-    @staticmethod
-    def _defs():
-        defs = Definitions()
-        defs.add("a")
-        defs.add("b")
-        defs.add("c")
-        defs.add("d")
-        return defs
-
-    def test_update(self):
-        values = Values(self._defs(), {'a': None, 'b': 1, 'c': None})
-        # Invalid keys
-        with self.assertRaises(UndefinedError):
-            values.update({'e':None})
-        with self.assertRaises(UndefinedError):
-            values.update({'a':None, 'e':None})
-        # Update
-        values2 = values.update({'c': 9, 'd': 8})
-        self.assertEqual([values2.get(x) for x in ("a", "b", "c", "d")], [None, 1, 9, 8])
-        self.assertEqual([values.get(x) for x in ("a", "b", "c", "d")], [None, 1, None, None])
-
-    def test_get(self):
-        values = Values(self._defs(), {'a': 1})
-        self.assertEqual(values.get('a'), 1)
-        self.assertEqual(values['a'], 1)
-        self.assertEqual(values.get('b'), None)
-        with self.assertRaises(KeyError):
-            values['b'] # value not defined
-        with self.assertRaises(UndefinedError):
-            values.get('e') # setting not defined
-        with self.assertRaises(UndefinedError):
-            _ = values['e'] # setting not defined and value not defined
-
-    def test_immutable(self):
-        values = Values(self._defs(), {'a': 0})
-        with self.assertRaises(TypeError):
-            values['a'] = 1
-
-
 class SettingsTest(unittest.TestCase):
     def test_init(self):
         s = Settings()
@@ -143,7 +103,7 @@ class SettingsTest(unittest.TestCase):
         s.define("a")
         s.define("b", "description")
         s.define("c")
-        s._values = s._values.update({"a": 1, "b": 2})
+        s._update_values({"a": 1, "b": 2})
         self.assertEqual(s.get("a"), 1)
         self.assertEqual(s["a"], 1)
         self.assertEqual(s.get("b"), 2)
@@ -170,7 +130,7 @@ class SettingsTest(unittest.TestCase):
         s.define("prefix.a")
         s.define("prefix.b", "otherdesc")
         s.define("prefix.c")
-        s._set_values(s._values.update({"a": 1, "prefix.a": 2, "prefix.b": 3}))
+        s._update_values({"a": 1, "prefix.a": 2, "prefix.b": 3})
 
         sfi = s.for_("inexistent")
         with self.assertRaises(UndefinedError):
@@ -217,6 +177,17 @@ class SettingsMutationTest(unittest.TestCase):
             self.assertEqual(s.get("a"), 1)
         self.assertEqual(s.get("a"), None)
 
+    def test_enter_different_prefix(self):
+        s = Settings()
+        s_prefix = s.for_("prefix")
+        s.define("a")
+        s.define("prefix.a")
+        m = SettingsMutation(s, {"a": 1, "prefix.a": 2})
+        with m:
+            self.assertEqual(s.get("a"), 1)
+            self.assertEqual(s.get("prefix.a"), 2)
+            self.assertEqual(s_prefix.get("a"), 2)
+
     def test_enter_undefined(self):
         s = Settings()
         m1 = SettingsMutation(s, {"a":1})
@@ -232,10 +203,10 @@ class IntegrationTest(unittest.TestCase):
         s.define("prefix.a")
         s.define("prefix.b", "otherdesc")
         s.define("prefix.c")
-        s._set_values(s._values.update({"a": 1, "prefix.a": 2, "prefix.b": 3}))
+        s._update_values({"a": 1, "prefix.a": 2, "prefix.b": 3})
 
         sfi = s.for_("inexistent")
-        # no values can be set in invalid prefix
+        # no values can be set in prefix with no settings
         with self.assertRaises(UndefinedError):
             with sfi.values(a=1):
                 pass
