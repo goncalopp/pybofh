@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-
-'''Tests for xen.py'''
+"""Tests for xen.py"""
 
 import unittest
 import mock
@@ -9,6 +8,25 @@ from pkg_resources import resource_stream
 from pybofh.shell import MockShell
 from pybofh import xen
 
+XL_LIST_DATA = """Name                                        ID   Mem VCPUs    State   Time(s)
+Domain-0                                     0  5301     2     r-----   72726.8
+domu1                                        1   256     1     -b----  106502.6
+domu2                                        2   256     1     -b----   12900.8
+domu3                                        3   128     1     -b----    6917.9
+"""
+
+class Environment(object):
+    def xl(self, command):
+        assert command[0] == xen.XL
+        if command[1] == 'list':
+            return XL_LIST_DATA
+        else:
+            raise NotImplementedError(str(command))
+
+def create_mock_shell(env):
+    shell = MockShell()
+    shell.add_mock_binary(xen.XL, env.xl)
+    return shell
 
 class DomuConfigTest(unittest.TestCase):
     def setUp(self):
@@ -50,7 +68,27 @@ class DomuConfigTest(unittest.TestCase):
         self.assertEqual(c.name, 'domu1')
 
 class ModuleTest(unittest.TestCase):
-    pass
+    def setUp(self):
+        self.env = Environment()
+        self.shell = create_mock_shell(self.env)
+        mocklist = [
+        {"target": "pybofh.shell.get", "side_effect": lambda: self.shell},
+        ]
+        patches = [mock.patch(autospec=True, **a) for a in mocklist]
+        for patch in patches:
+            patch.start()
+
+    def tearDown(self):
+        mock.patch.stopall()
+
+    def test_running_domus(self):
+        l = xen.running_domus()
+        self.assertEqual(len(l), 3)
+        self.assertEqual([d.name for d in l], ['domu1', 'domu2', 'domu3'])
+
+    def test_running_domus_names(self):
+        l = xen.running_domus_names()
+        self.assertEqual(l, ['domu1', 'domu2', 'domu3'])
 
 
 if __name__ == "__main__":

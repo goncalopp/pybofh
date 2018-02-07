@@ -1,16 +1,22 @@
 #!/usr/bin/python
 
-XM='/usr/sbin/xm'
+XL='/usr/sbin/xl'
 
 import os,subprocess
 from functools import partial
+import logging
 import re
 import shlex
 
-import lvm
-from mount import mount, unmount
-import encryption
+import pybofh
+from pybofh.mount import mount, unmount
+from pybofh import shell
 from site_specific import getDomuConfigFile, getDomuDiskMountpoint, getAllDomuNames
+
+log = logging.getLogger(__name__)
+
+settings = pybofh.settings.for_("xen")
+settings.define("domu_config_dirs", ["/etc/xen/"])
 
 class DomuDisk(object):
     def __init__(self, protocol, device, domu_device, access):
@@ -84,7 +90,6 @@ class DomuConfig(object):
         disks= map( disk_string_to_disk, disks_strings )
         return disks
 
-
 class Domu(object):
     class NoDomuConfig(Exception):
         pass
@@ -94,9 +99,9 @@ class Domu(object):
         self.configfile= configfile_path_override or getDomuConfigFile(name)
         if self.configfile:
             try:
-                self._config= DomuConfig( self.configfile )
+                self._config = DomuConfig(self.configfile)
             except Exception as e:
-                print "failed to get DomuConfig for {}:i {}".format(name, e)
+                log.info("Failed to get DomuConfig for {}: {}".format(name, e))
                 self._config= None
         self.sanity_check()
     
@@ -108,21 +113,21 @@ class Domu(object):
     
     def sanity_check(self):
         try:
-            n1,n2= self.name, self.config.getName()
-            if n1!=n2:
-                print "Warning: domu configured name mismatch: {},{}".format(n1,n2)
-        except Domu.NoDomuConfig(self):
+            n1, n2= self.name, self.config.getName()
+            if n1 != n2:
+                raise Exception("Domu configured name mismatch: {},{}".format(n1, n2))
+        except Domu.NoDomuConfig:
             pass
 
     def start(self):
-        print "starting domu {domu}".format(domu=self)
+        log.info("Starting domu {domu}".format(domu=self))
         cf= self.config.filename
-        command= (XM, "create", cf)
+        command= (XL, "create", cf)
         subprocess.check_call(command)
 
     @property
     def isRunning(self):
-        return self.name in runningDomus( return_objects=False )
+        return self.name in running_domus_names()
 
     def __repr__(self):
         return "Domu<{}>".format(self.name)
@@ -130,45 +135,12 @@ class Domu(object):
 def allDomus():
     return map(Domu, getAllDomuNames())
 
-def runningDomus(return_objects=True):
-    command = (XM, "list")
-    out= subprocess.check_output(command)
+def running_domus_names():
+    command = (XL, "list")
+    out= shell.get().check_output(command)
     running = [line.split()[0] for line in out.split('\n')[1:-1]]
     running.remove('Domain-0') #Domain-0 is not a DomU!
-    if return_objects:
-        return map(Domu, running)
-    else:
-        return running
+    return running
 
-def getOpenedDomuDisks(domu_vg, domu):
-    return encryption.get_opened_disks( getDomuDisks(domu_vg, domu) )
-
-def mountedDomuDisks( domu_vg, domu, mountpoint ):
-    '''mounts all domU disks (a root filesystem, possibly home, var, etc...)
-    under a mountpoint'''
-    print "mounting domu disks for domu {domu}".format(**locals())
-    if domu.isRunning:
-        raise Exception("domU is currently running. Refusing to mount disks to avoid data loss")
-    d_disks = getOpenedDomuDisks(domu_vg, domu)
-    disk_mounts = [(d, getDomuDiskMountpoint(d)) for d in d_disks]
-    disk_mounts = sorted(disk_mounts, key=lambda x: len(x[1]))
-    for d,dm in disk_mounts:
-        if dm != "":
-            assert dm.startswith("/")
-            m = os.path.join(mountpoint, dm[1:])
-            print "mounting "+d+" on "+m 
-            mount(d,m)
-
-def unmountDomuDisks( domu_vg, domu, mountpoint ):
-    '''unmounts all domU disks (a root filesystem, possibly home, var, etc...)
-    under a mountpoint'''
-    print "unmounting domu disks for domu {domu}".format(**locals())
-    d_disks = getOpenedDomuDisks(domu_vg, domu)
-    disk_mounts = [(d, getDomuDiskMountpoint(d)) for d in d_disks]
-    disk_mounts = sorted(disk_mounts, key=lambda x: -len(x[1]))    #sort 
-    for d,dm in disk_mounts:
-        if dm != "":
-            assert dm.startswith("/")
-            m = os.path.join(mountpoint, dm[1:])
-            print "unmounting "+d+" on "+m 
-            unmount(m)
+def running_domus(return_objects=True):
+    return map(Domu, running_domus_names())
