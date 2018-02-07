@@ -110,10 +110,10 @@ class ModuleTest(unittest.TestCase):
 
     def test_all_domus_configs(self):
         with mock.patch('os.listdir', return_value=['domu.cfg', 'unrelated.txt']):
-            with settings.for_('xen').values(domu_config_dirs=[]):
+            with settings.for_('xen').change(domu_config_dirs=[]):
                 l = xen.all_domus_configs()
                 self.assertEqual(l, [])
-            with settings.for_('xen').values(domu_config_dirs=['/a', '/b']):
+            with settings.for_('xen').change(domu_config_dirs=['/a', '/b']):
                 l = xen.all_domus_configs()
                 self.assertEqual(l, ['/a/domu.cfg', '/b/domu.cfg'])
 

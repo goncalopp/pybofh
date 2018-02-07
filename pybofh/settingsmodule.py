@@ -149,11 +149,11 @@ class Settings(object):
     The values instance is immutable, and the reference to it can be modified exclusively through a context manager.
     """
     def __init__(self, defs=None, valuesptr=None, resolver=None):
-        self._defs = defs or Definitions()
+        self.defs = defs or Definitions()
         self._valuesptr = valuesptr or ValuesPointer()
         self.resolver = resolver or Resolver()
         for v in self._valuesptr.values:
-            self._defs.enforce_defined(v)
+            self.defs.enforce_defined(v)
 
     def get(self, name, default=None):
         """Gets the value of a setting.
@@ -162,7 +162,7 @@ class Settings(object):
         To get without a default, use __getitem__.
         """
         key = self.resolver.name_to_key(name)
-        self._defs.enforce_defined(key)
+        self.defs.enforce_defined(key)
         return self._valuesptr.values.get(key, default)
 
     def __getitem__(self, name):
@@ -171,24 +171,24 @@ class Settings(object):
         If the setting has no value, raises KeyError.
         """
         key = self.resolver.name_to_key(name)
-        self._defs.enforce_defined(key)
+        self.defs.enforce_defined(key)
         return self._valuesptr.values[key]
 
     def __iter__(self):
-        l = self.resolver.key_to_name(list(self._defs), ignore_mismatches=True)
+        l = self.resolver.key_to_name(list(self.defs), ignore_mismatches=True)
         return iter(l)
 
     def define(self, name, description=None):
         """Defines a new setting"""
         key = self.resolver.name_to_key(name)
-        self._defs.add(key, description)
+        self.defs.add(key, description)
 
     def _qualify_new_values(self, values):
         if not isinstance(values, Values):
             # scope the dict keys to this resolver
             values = Values(self.resolver.name_to_key(values))
         for v in values:
-            self._defs.enforce_defined(v)
+            self.defs.enforce_defined(v)
         return values
 
     def _set_values(self, values):
@@ -208,16 +208,20 @@ class Settings(object):
         Example: settings.for_("prefix").get("a") is equivalent to settings.get("prefix.a").
         """
         resolver = self.resolver.for_(prefix)
-        return Settings(defs=self._defs, valuesptr=self._valuesptr, resolver=resolver)
+        return Settings(defs=self.defs, valuesptr=self._valuesptr, resolver=resolver)
 
-    def values(self, **kwargs):
+    def __call__(self, **kwargs):
+        return self.change(**kwargs)
+
+    def change(self, **kwargs):
         """Returns a context manager that mutates the given values.
         The values are changed only while the context manager is opened.
+        Not thread-safe.
         """
         return SettingsMutation(self, kwargs)
 
 class SettingsMutation(object):
-    """Context Manager for changing settings"""
+    """Context Manager for changing settings. Not thread-safe."""
     def __init__(self, settings, updates):
         self.settings = settings
         self.updates = updates

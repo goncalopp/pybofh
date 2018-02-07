@@ -149,9 +149,10 @@ class SettingsTest(unittest.TestCase):
             sfi.get("d")
         self.assertEqual(list(sfp), ["a", "b", "c"])
 
-    def test_values(self):
+    def test_changs(self):
         s = Settings()
-        self.assertIsInstance(s.values(), SettingsMutation)
+        with s.change() as mutation:
+            self.assertIsInstance(mutation, SettingsMutation)
         # functionality is tested on TestSettingsMutation and IntegrationTest
 
 
@@ -208,14 +209,14 @@ class IntegrationTest(unittest.TestCase):
         sfi = s.for_("inexistent")
         # no values can be set in prefix with no settings
         with self.assertRaises(UndefinedError):
-            with sfi.values(a=1):
+            with sfi(a=1):
                 pass
         with self.assertRaises(UndefinedError):
-            with sfi.values(b=1):
+            with sfi(b=1):
                 pass
 
         sfp = s.for_("prefix")
-        with sfp.values(a=88, b=77):
+        with sfp(a=88, b=77):
             # values in prefix are changed
             self.assertEquals(sfp.get("a"), 88)
             self.assertEquals(sfp.get("b", 99), 77)
