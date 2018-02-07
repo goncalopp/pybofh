@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-
-'''Tests for blockdevice.py'''
+"""Tests for blockdevice.py"""
 # pylint: disable=no-member
 # pylint: disable=no-self-use
 # pylint: disable=protected-access
@@ -221,7 +220,6 @@ def create_mock_shell(mock_devices):
         shell.add_mock(md.mock_shell_match, md.mock_shell_execute)
     shell.add_mock('/bin/lsblk', LSBLK_DATA)
     shell.add_mock(('/sbin/dmsetup', 'info', '/dev/mapper/vg01-lv01'), DMSETUP_INFO_DATA)
-
     return shell
 
 def get_dev_from_path(path, mock_devices):

@@ -3,10 +3,10 @@
 
 import unittest
 import mock
-import functools
 from pkg_resources import resource_stream
 from pybofh.shell import MockShell
 from pybofh import xen
+from pybofh import settings
 
 XL_LIST_DATA = """Name                                        ID   Mem VCPUs    State   Time(s)
 Domain-0                                     0  5301     2     r-----   72726.8
@@ -67,12 +67,30 @@ class DomuConfigTest(unittest.TestCase):
         c = xen.DomuConfig(self.f)
         self.assertEqual(c.name, 'domu1')
 
+class DomuTest(unittest.TestCase):
+    def test_init(self):
+        domu = xen.Domu("random_name")
+        self.assertIsInstance(domu, xen.Domu)
+
+    def test_config(self):
+        domu = xen.Domu("random_name")
+        with self.assertRaises(xen.NoDomuConfig):
+            _ = domu.config
+        # TODO: implement test with actual config
+
+    def test_start(self):
+        domu = xen.Domu("random_name")
+        with self.assertRaises(xen.NoDomuConfig):
+            domu.start()
+        # TODO: implement test for actual start (with config)
+
+
 class ModuleTest(unittest.TestCase):
     def setUp(self):
         self.env = Environment()
         self.shell = create_mock_shell(self.env)
         mocklist = [
-        {"target": "pybofh.shell.get", "side_effect": lambda: self.shell},
+            {"target": "pybofh.shell.get", "side_effect": lambda: self.shell},
         ]
         patches = [mock.patch(autospec=True, **a) for a in mocklist]
         for patch in patches:
@@ -89,6 +107,16 @@ class ModuleTest(unittest.TestCase):
     def test_running_domus_names(self):
         l = xen.running_domus_names()
         self.assertEqual(l, ['domu1', 'domu2', 'domu3'])
+
+    def test_all_domus_configs(self):
+        with mock.patch('os.listdir', return_value=['domu.cfg', 'unrelated.txt']):
+            with settings.for_('xen').values(domu_config_dirs=[]):
+                l = xen.all_domus_configs()
+                self.assertEqual(l, [])
+            with settings.for_('xen').values(domu_config_dirs=['/a', '/b']):
+                l = xen.all_domus_configs()
+                self.assertEqual(l, ['/a/domu.cfg', '/b/domu.cfg'])
+
 
 
 if __name__ == "__main__":
