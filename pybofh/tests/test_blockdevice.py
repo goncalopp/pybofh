@@ -11,6 +11,7 @@ import mock
 import functools
 from pybofh.shell import FakeShell
 from pybofh import blockdevice
+from pybofh.tests.common import FakeEnvironment, FakeDevice
 
 LSBLK_DATA = """NAME                                MAJ:MIN RM  SIZE RO TYPE  MOUNTPOINT
 sda                                   8:0    0  2.7T  0 disk  
@@ -42,30 +43,6 @@ UUID: LVM-0bIWK7rs4OtKBT3YAk9qJpnSa19Yj4pbAR5j79MUV5HFIst4JF0McYNuq9avYXBC
 
 """
 # Aux classes for testing -------------------------------------------
-
-class FakeDevice(object):
-    def __init__(self, path, content, parent=None, size=10*2**20, granularity=1):
-        self.path = path
-        self.content = content
-        self.size = size
-        self.granularity = granularity
-        self.child = None
-        self.parent = parent
-        if parent:
-            parent.child = self
-
-    def fake_shell_match(self, command):
-        """Whether this FakeDevice should execute the faked command - used in FakeShell"""
-        return self.path in command
-
-    def fake_shell_execute(self, command):
-        """Implementation of command execution for FakeShell"""
-        if command == ('/sbin/blockdev', '--getsize64', self.path):
-            return str(self.size)
-        if command == ('file', '--special', '--dereference', self.path):
-            name = self.content.__name__ if callable(self.content) else self.content.__class__.__name__
-            return "{}: some data: {}".format(self.path, name)
-        raise Exception("Unhandled fake command: " + command)
 
 class SimpleResizeable(blockdevice.Resizeable):
     GRANULARITY = 29
@@ -184,7 +161,6 @@ class SimpleOuterLayer(blockdevice.OuterLayer):
     def _size(self):
         return self._simple_size
 
-
 class SimpleInnerLayer(blockdevice.InnerLayer):
     def __init__(self, outer_layer, **kwargs):
         blockdevice.InnerLayer.__init__(self, outer_layer, **kwargs)
@@ -215,32 +191,30 @@ blockdevice.register_data_class('SimpleData', SimpleData)
 blockdevice.register_data_class('SimpleOuterLayer', SimpleOuterLayer)
 
 def create_fake_shell(fake_devices):
-    shell = FakeShell()
-    for md in fake_devices:
-        shell.add_fake(md.fake_shell_match, md.fake_shell_execute)
-    shell.add_fake('/bin/lsblk', LSBLK_DATA)
-    shell.add_fake(('/sbin/dmsetup', 'info', '/dev/mapper/vg01-lv01'), DMSETUP_INFO_DATA)
     return shell
 
-def get_dev_from_path(path, fake_devices):
-    for md in fake_devices:
-        if md.path == path:
-            return SimpleBlockDevice(md)
+def get_dev_from_path(env, path):
+    fake_device = env.get_device(path)
+    if fake_device:
+        return SimpleBlockDevice(fake_device)
     return SimpleBlockDevice(path)
 
-def generic_setup(test_instance, fake_devices=()):
+def generic_setup(test_instance):
     '''Setups mocks'''
     # pylint: disable=unnecessary-lambda, star-args
-    shell = create_fake_shell(fake_devices)
-    test_instance.shell = shell
+    env = FakeEnvironment()
+    env.shell.add_fake('/bin/lsblk', LSBLK_DATA)
+    env.shell.add_fake(('/sbin/dmsetup', 'info', '/dev/mapper/vg01-lv01'), DMSETUP_INFO_DATA)
+    test_instance.env = env
+
     mocklist = [
         {"target": "os.path.isdir"},
         {"target": "os.path.exists"},
         {"target": "pybofh.blockdevice.blockdevice_from_path", "side_effect": lambda path: SimpleBlockDevice(path)},
-        {"target": "pybofh.shell.get", "side_effect": lambda: shell},
+        {"target": "pybofh.shell.get", "side_effect": lambda: env.shell},
         ]
     patches = [mock.patch(autospec=True, **a) for a in mocklist] + \
-        [mock.patch('pybofh.blockdevice.blockdevice_from_path', new=functools.partial(get_dev_from_path, fake_devices=fake_devices))]
+        [mock.patch('pybofh.blockdevice.blockdevice_from_path', new=functools.partial(get_dev_from_path, env))]
     for patch in patches:
         patch.start()
 
@@ -378,8 +352,9 @@ class ParametrizableTest(unittest.TestCase):
 
 class BlockdeviceTest(unittest.TestCase):
     def setUp(self):
+        generic_setup(self)
         self.bd = FakeDevice('/dev/inexistent', SimpleData)
-        generic_setup(self, (self.bd,))
+        self.env.add_device(self.bd)
 
     def tearDown(self):
         mock.patch.stopall()
@@ -391,7 +366,7 @@ class BlockdeviceTest(unittest.TestCase):
     def test_size(self):
         b = blockdevice.BlockDevice(self.bd.path)
         self.assertEquals(b.size, self.bd.size)
-        self.assertEquals(self.shell.run_commands[-1], ('/sbin/blockdev', '--getsize64', self.bd.path))
+        self.assertEquals(self.env.shell.run_commands[-1], ('/sbin/blockdev', '--getsize64', self.bd.path))
 
     def test_size_badgranularity(self):
         self.bd.granularity = 10
@@ -412,7 +387,7 @@ class BlockdeviceTest(unittest.TestCase):
         b = blockdevice.BlockDevice(self.bd.path)
         data = b.data
         # getting the data uses file to check the format of content in the blockdevice
-        self.assertIn(('file', '--special', '--dereference', self.bd.path), self.shell.run_commands)
+        self.assertIn(('file', '--special', '--dereference', self.bd.path), self.env.shell.run_commands)
         self.assertIsInstance(data, SimpleData) # SimpleData is registered in this test file
 
     def test_data_identity(self):
@@ -434,7 +409,7 @@ class BlockdeviceTest(unittest.TestCase):
         with self.assertRaises(blockdevice.Resizeable.ResizeError):
             # Should refuse to resize unless no_data arg is provided
             b.resize(-100, relative=True)
-        self.assertEqual(len(self.shell.run_commands), 0)
+        self.assertEqual(len(self.env.shell.run_commands), 0)
         with self.assertRaises(NotImplementedError):
             # resize is not implemented for base BlockDevice
             b.resize(-100, relative=True, no_data=True)
@@ -443,7 +418,9 @@ class OuterLayerTest(unittest.TestCase):
     def setUp(self):
         self.l0 = FakeDevice('/dev/inexistent_l0', SimpleOuterLayer)
         self.l1 = FakeDevice('/dev/inexistent_l1', SimpleData, parent=self.l0)
-        generic_setup(self, (self.l0,))
+        generic_setup(self)
+        self.env.add_device(self.l0)
+        self.env.add_device(self.l1)
 
     def tearDown(self):
         mock.patch.stopall()
@@ -469,7 +446,8 @@ class InnerLayerTest(unittest.TestCase):
     def setUp(self):
         self.l0 = FakeDevice('/dev/inexistent_l0', SimpleOuterLayer)
         self.l1 = FakeDevice('/dev/inexistent_l1', SimpleData, parent=self.l0)
-        generic_setup(self, (self.l0,))
+        generic_setup(self)
+        self.env.add_device(self.l0)
 
     def tearDown(self):
         mock.patch.stopall()
@@ -498,7 +476,10 @@ class BlockDeviceStackTest(unittest.TestCase):
         self.l0 = FakeDevice('/dev/inexistent_l0', SimpleOuterLayer)
         self.l1 = FakeDevice('/dev/inexistent_l1', SimpleOuterLayer, parent=self.l0)
         self.l2 = FakeDevice('/dev/inexistent_l2', SimpleData, parent=self.l1)
-        generic_setup(self, (self.l0, self.l1, self.l2))
+        generic_setup(self)
+        self.env.add_device(self.l0)
+        self.env.add_device(self.l1)
+        self.env.add_device(self.l2)
         mock.patch('pybofh.blockdevice.InnerLayer._externally_open_data', return_value=None).start()
 
     def tearDown(self):
