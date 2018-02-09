@@ -40,20 +40,20 @@ class SystemShell(Shell):
         result = subprocess.check_output(command)
         return result
 
-class MockShell(Shell):
-    class NoMockForCommand(Exception):
+class FakeShell(Shell):
+    class NoFakeForCommand(Exception):
         def __init__(self, command):
-            Exception.__init__(self, "No mock exists for command: {}".format(command))
+            Exception.__init__(self, "No fake exists for command: {}".format(command))
 
     def __init__(self):
-        self._mocks = []
+        self._fakes = []
         self.run_commands = []
 
-    def add_mock(self, command, response):
-        """Adds a mock command to the MockShell.
+    def add_fake(self, command, response):
+        """Adds a fake command to the FakeShell.
 
         Command can either be a tuple, or a callable.
-        If it's a tuple, it represents the literal command that this mock should respond to.
+        If it's a tuple, it represents the literal command that this fake should respond to.
         Example: ("ls", "thisdirectory")
         If command is a callable, it should take a single argument (the command) and return True iff the response should be used.
 
@@ -67,29 +67,29 @@ class MockShell(Shell):
             pass
         else:
             command = tuple(command)
-        self._mocks.append((command, response))
+        self._fakes.append((command, response))
 
-    def add_mock_binary(self, binary_path, response):
-        """Adds a mock "binary" to the MockShell.
+    def add_fake_binary(self, binary_path, response):
+        """Adds a fake "binary" to the FakeShell.
 
-        This is a helper function on top of add_mock(), that helps creating the command function,
-        such that all commands that start with the given binary name are matched. This also simulates shell path, so that add_mock_binary('/bin/ls', ...) will match command ('ls', ...).
+        This is a helper function on top of add_fake(), that helps creating the command function,
+        such that all commands that start with the given binary name are matched. This also simulates shell path, so that add_fake_binary('/bin/ls', ...) will match command ('ls', ...).
         binary_path can be an absolute or relative path.
-        The response argument is passed unmodified to add_mock() (see documentation there).
+        The response argument is passed unmodified to add_fake() (see documentation there).
         """
         f = functools.partial(_command_matches_binary, binary_path)
-        self.add_mock(f, response)
+        self.add_fake(f, response)
 
-    def _get_mock_response(self, command):
-        for mock_command, mock_response in self._mocks:
-            if (callable(mock_command) and mock_command(command)) or command == mock_command:
+    def _get_fake_response(self, command):
+        for fake_command, fake_response in self._fakes:
+            if (callable(fake_command) and fake_command(command)) or command == fake_command:
                 self.run_commands.append(command)
-                return mock_response(command) if callable(mock_response) else mock_response
-        raise MockShell.NoMockForCommand(command)
+                return fake_response(command) if callable(fake_response) else fake_response
+        raise FakeShell.NoFakeForCommand(command)
 
     def _run_process(self, command):
         assert not isinstance(command, str)
-        return self._get_mock_response(command)
+        return self._get_fake_response(command)
 
 def _command_matches_binary(binary, command):
     """Evaluates whether a given command matches a given binary.

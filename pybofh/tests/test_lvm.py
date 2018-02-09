@@ -5,7 +5,7 @@
 import unittest
 import mock
 from pybofh import lvm
-from pybofh.shell import MockShell
+from pybofh.shell import FakeShell
 
 PV = '/dev/in1'
 VG = 'in_vg'
@@ -75,10 +75,10 @@ def command_side_effect(command):
 
 def generic_setup(test_instance):
     '''Setups mocks'''
-    test_instance.shell = shell = MockShell()
-    shell.add_mock('/sbin/vgdisplay', VGDISPLAY_DATA)
-    shell.add_mock('/sbin/lvdisplay', LVDISPLAY_DATA)
-    shell.add_mock(lambda _: True, mock.DEFAULT) # catch-all
+    test_instance.shell = shell = FakeShell()
+    shell.add_fake('/sbin/vgdisplay', VGDISPLAY_DATA)
+    shell.add_fake('/sbin/lvdisplay', LVDISPLAY_DATA)
+    shell.add_fake(lambda _: True, mock.DEFAULT) # catch-all
     mocklist = [
         {"target": "os.path.isdir"},
         {"target": "os.path.exists"},

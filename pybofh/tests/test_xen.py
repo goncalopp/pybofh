@@ -4,7 +4,7 @@
 import unittest
 import mock
 from pkg_resources import resource_stream
-from pybofh.shell import MockShell
+from pybofh.shell import FakeShell
 from pybofh import xen
 from pybofh import settings
 
@@ -17,6 +17,7 @@ domu3                                        3   128     1     -b----    6917.9
 """
 
 class Environment(object):
+    """Shell environment - keeps state for side effects from commands"""
     def xl(self, command):
         assert command[0] == xen.XL
         c1 = command[1]
@@ -27,14 +28,14 @@ class Environment(object):
         else:
             raise NotImplementedError(str(command))
 
-def create_mock_shell(env):
-    shell = MockShell()
-    shell.add_mock_binary(xen.XL, env.xl)
+def create_fake_shell(env):
+    shell = FakeShell()
+    shell.add_fake_binary(xen.XL, env.xl)
     return shell
 
 def generic_setup(testcase):
     testcase.env = Environment()
-    testcase.shell = create_mock_shell(testcase.env)
+    testcase.shell = create_fake_shell(testcase.env)
     mocklist = [
         {"target": "pybofh.shell.get", "side_effect": lambda: testcase.shell},
     ]

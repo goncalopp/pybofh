@@ -4,14 +4,14 @@ import unittest
 import mock
 from pybofh.mount import Mounted, NestedMounted, MountPool, mount, unmount
 
-from pybofh.shell import MockShell
+from pybofh.shell import FakeShell
 
 DEVS = ('/dev/in1', '/dev/in2', '/dev/in3', '/dev/in4')
 MTS = ('/mnt/in1', '/mnt/in2', '/mnt/in3')
 
 def generic_setup(test_instance):
-    shell = MockShell()
-    shell.add_mock(lambda command: True, None)
+    shell = FakeShell()
+    shell.add_fake(lambda command: True, None)
     test_instance.shell = shell
     mocklist = [
         {'target': 'os.path.isdir'},
