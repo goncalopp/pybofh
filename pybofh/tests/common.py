@@ -29,6 +29,12 @@ class FakeDevice(object):
         if parent:
             parent.child = self
 
+    @property
+    def file_type(self):
+        """The file type, in the syle returned by "file" UNIX command"""
+        name = self.content.__name__
+        return "{}: some data, {}".format(self.path, name)
+
     def fake_shell_match(self, command):
         """Whether this FakeDevice should execute the faked command - used in FakeShell"""
         return self.path in command
@@ -38,7 +44,12 @@ class FakeDevice(object):
         if command == ('/sbin/blockdev', '--getsize64', self.path):
             return str(self.size)
         if command == ('file', '--special', '--dereference', self.path):
-            name = self.content.__name__ if callable(self.content) else self.content.__class__.__name__
-            return "{}: some data: {}".format(self.path, name)
+            return self.file_type
         raise Exception("Unhandled fake command: " + command)
+
+def get_fake_environment():
+    """Returns the current test's FakeEnvironment instance.
+    This function is meant to be overriden using mock.patch.
+    """
+    raise Exception("get_fake_environment is meant to be overriden by a mock.patch")
 

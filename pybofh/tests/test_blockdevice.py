@@ -11,6 +11,7 @@ import mock
 import functools
 from pybofh.shell import FakeShell
 from pybofh import blockdevice
+from pybofh.tests import common
 from pybofh.tests.common import FakeEnvironment, FakeDevice
 
 LSBLK_DATA = """NAME                                MAJ:MIN RM  SIZE RO TYPE  MOUNTPOINT
@@ -91,10 +92,9 @@ class SimpleParametrizable(blockdevice.Parametrizable):
         return ('a', 'b', 'c')
 
 class SimpleBlockDevice(blockdevice.BlockDevice):
-    def __init__(self, path_or_fake_device):
-        self.fakedevice = path_or_fake_device if isinstance(path_or_fake_device, FakeDevice) else None
-        path = self.fakedevice.path if self.fakedevice else path_or_fake_device
-        blockdevice.BlockDevice.__init__(self, path)
+    @property
+    def fakedevice(self):
+        return common.get_fake_environment().get_device(self.path)
 
     @property
     def resize_granularity(self):
@@ -165,8 +165,11 @@ class SimpleInnerLayer(blockdevice.InnerLayer):
     def __init__(self, outer_layer, **kwargs):
         blockdevice.InnerLayer.__init__(self, outer_layer, **kwargs)
         self._simple_size = outer_layer.size
-        self.fakedevice = outer_layer.device.fakedevice.child
         self.outer_layer = outer_layer
+
+    @property
+    def fakedevice(self):
+        return self.outer_layer.device.fakedevice.child
 
     def _close(self):
         pass
@@ -190,13 +193,7 @@ class SimpleInnerLayer(blockdevice.InnerLayer):
 blockdevice.register_data_class('SimpleData', SimpleData)
 blockdevice.register_data_class('SimpleOuterLayer', SimpleOuterLayer)
 
-def create_fake_shell(fake_devices):
-    return shell
-
 def get_dev_from_path(env, path):
-    fake_device = env.get_device(path)
-    if fake_device:
-        return SimpleBlockDevice(fake_device)
     return SimpleBlockDevice(path)
 
 def generic_setup(test_instance):
@@ -214,7 +211,7 @@ def generic_setup(test_instance):
         {"target": "pybofh.shell.get", "side_effect": lambda: env.shell},
         ]
     patches = [mock.patch(autospec=True, **a) for a in mocklist] + \
-        [mock.patch('pybofh.blockdevice.blockdevice_from_path', new=functools.partial(get_dev_from_path, env))]
+        [mock.patch('pybofh.tests.common.get_fake_environment', new=lambda: env)]
     for patch in patches:
         patch.start()
 
@@ -743,7 +740,6 @@ class ModuleTest(unittest.TestCase):
         self.assertEqual(info['Name'], 'vg01-lv01')
         self.assertEqual(info['UUID'], 'LVM-0bIWK7rs4OtKBT3YAk9qJpnSa19Yj4pbAR5j79MUV5HFIst4JF0McYNuq9avYXBC')
         self.assertEqual(info['Open count'], 1)
-
 
 if __name__ == "__main__":
     unittest.main()
