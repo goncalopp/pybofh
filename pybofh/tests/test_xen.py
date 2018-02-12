@@ -4,7 +4,7 @@
 import unittest
 import mock
 from pkg_resources import resource_stream
-from pybofh.shell import FakeShell
+from pybofh.tests import common
 from pybofh import xen
 from pybofh import settings
 
@@ -16,7 +16,7 @@ domu2                                        2   256     1     -b----   12900.8
 domu3                                        3   128     1     -b----    6917.9
 """
 
-class Environment(object):
+class FakeEnvironment(common.FakeEnvironment):
     """Shell environment - keeps state for side effects from commands"""
     def xl(self, command):
         assert command[0] == xen.XL
@@ -28,16 +28,12 @@ class Environment(object):
         else:
             raise NotImplementedError(str(command))
 
-def create_fake_shell(env):
-    shell = FakeShell()
-    shell.add_fake_binary(xen.XL, env.xl)
-    return shell
-
 def generic_setup(testcase):
-    testcase.env = Environment()
-    testcase.shell = create_fake_shell(testcase.env)
+    env = FakeEnvironment()
+    testcase.env = env
+    env.shell.add_fake_binary(xen.XL, env.xl)
     mocklist = [
-        {"target": "pybofh.shell.get", "side_effect": lambda: testcase.shell},
+        {"target": "pybofh.shell.get", "side_effect": lambda: env.shell},
     ]
     mock.patch("pybofh.xen.all_domus_configs_files", new=lambda: [resource_stream('pybofh.tests', cfg) for cfg in DOMUS_CFGS]).start()
     patches = [mock.patch(autospec=True, **a) for a in mocklist]
@@ -104,7 +100,7 @@ class DomuTest(unittest.TestCase):
     def test_start(self):
         domu = xen.Domu("domu1")
         domu.start()
-        self.assertEqual(self.shell.run_commands[-1], (xen.XL, 'create', "domu1"))
+        self.assertEqual(self.env.shell.run_commands[-1], (xen.XL, 'create', "domu1"))
 
 class ModuleTest(unittest.TestCase):
     def setUp(self):
