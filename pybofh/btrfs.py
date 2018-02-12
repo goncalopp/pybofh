@@ -1,19 +1,22 @@
 from pybofh import shell
+import logging
 import os
 
+log = logging.getLogger(__name__)
+BTRFS_BIN = '/sbin/btrfs'
+
 def snapshot(fro, to):
-    #command already prints #print "Creating snapshot of {fro} in {to}".format(**locals())
-    assert not os.path.exists(to)
-    command= ("/sbin/btrfs", "sub", "snap", fro, to)
+    logging.info("Creating snapshot of {} in {}".format(fro, to))
+    command= (BTRFS_BIN, "sub", "snap", fro, to)
     shell.get().check_call(command)
 
 def create_subvolume(path):
-    print "Creating subvolume: {path}".format(**locals())
-    command= ("/sbin/btrfs", "sub", "create", path)
+    logging.info("Creating subvolume: {}".format(path))
+    command= (BTRFS_BIN, "sub", "create", path)
     shell.get().check_call(command)
 
 def get_subvolumes(path):
-    command= ("/sbin/btrfs", "sub", "list", path)
+    command= (BTRFS_BIN, "sub", "list", path)
     out= shell.get().check_output(command)
     def line_to_subvol(line):
         splitted= line.split()
@@ -26,18 +29,21 @@ def get_subvolumes(path):
 
 def get_subvolume_id( fs_path, subvol_path ):
     subs= get_subvolumes( fs_path )
-    subs= filter( lambda sub: subvol_path in sub['path'], subs )
-    assert len(subs)==1
+    subs= [s for s in subs if s["path"] == subvol_path]
+    if len(subs) > 1:
+        raise Exception("Found more than one subvolume for path: {}".format(subvol_path))
+    if len(subs) == 0:
+        raise KeyError("Subvolume not found: {}".format(subvol_path))
     return subs[0]["id"]
 
-def set_default_subvol( fs_path, subvol_id ):
-    print "Setting default subvolume of {fs_path} to {subvol_id}".format(**locals())
-    command= ("/sbin/btrfs", "sub", "set", subvol_id, fs_path)
+def set_default_subvolume( fs_path, subvol_id ):
+    logging.info("Setting default subvolume of {} to {}".format(fs_path, subvol_id))
+    command= (BTRFS_BIN, "sub", "set", str(subvol_id), fs_path)
     shell.get().check_call(command)
 
 def create_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_subv=True):
     '''Creates default subvolumes, and snapshots directory structure, migrating any existing data'''
-    SUBVOL_NAME= {"":"root", "home":"home"} #path of a subvolume inside the root subvolume
+    SUBVOL_NAME= {"":"rootfs", "home":"home"} #path of a subvolume inside the root subvolume
     SNAPSHOT_PATH= "snapshots"			#snapshot directory, inside the root subvolume    
     SUBVOLUME_PATH="subvolumes"
     
@@ -51,13 +57,12 @@ def create_base_structure(rootsubvol_mountpoint, subvolumes=[""], set_default_su
     def subvol_path( subvolume ):
         return j(mountpoint, SUBVOLUME_PATH, SUBVOL_NAME[subvolume]) 
     
-    print "creating btrfs base structure on {rootsubvol_mountpoint}".format(**locals())
+    logging.info("creating btrfs base structure on {}".format(rootsubvol_mountpoint))
     oldlisting= os.listdir(mountpoint)
     
     assert is_mountpoint(mountpoint)
     assert len(subvolumes) and set( subvolumes )<set(SUBVOL_NAME.keys())
     
-    print "creating dirs"
     if not os.path.isdir(j(mountpoint, SNAPSHOT_PATH)):
         os.mkdir(j(mountpoint, SNAPSHOT_PATH))
     if not os.path.isdir(j(mountpoint, SUBVOLUME_PATH)):
@@ -87,7 +92,7 @@ def install_btrfs_snapshot_rotation(mountpoint="/", fs_path="/", snap_path="/med
         snap_path: path we want snapshots stored on, relative to mountpoint
         '''
     SCRIPT_PATH="{mountpoint}/usr/local/bin".format(**locals())
-    print "installing btrfs-snapshot on {mountpoint}".format(**locals())
+    logging.info("installing btrfs-snapshot on {}".format(mountpoint))
     source_script_path= get_btrfs_snapshot_path()
     assert any(map(os.path.exists, ("/sbin/anacron", "/usr/sbin/anacron"))) #check anacron is installed
     assert not os.path.exists(SCRIPT_PATH+"/btrfs-snapshot")	#check btrfs-snapshot not installed
