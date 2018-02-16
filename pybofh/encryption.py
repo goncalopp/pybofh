@@ -5,6 +5,7 @@ import os, os.path
 import struct
 from pybofh import shell
 from pybofh import blockdevice
+from pybofh import misc
 
 LUKS_SECTOR_SIZE = 512 #this seems hardcoded into luks, so hopefully it's safe to keep it there
 CRYPTSETUP = '/sbin/cryptsetup'
@@ -24,7 +25,7 @@ class Encrypted(blockdevice.OuterLayer, blockdevice.Parametrizable):
     def _size(self):
         try:
             header_size = luks_data_offset(self.device.path)
-            return header_size + self.inner.size
+            return header_size + self.inner.size # can be different from self.device.size, if it's been resized
         except blockdevice.NotReady:
             #there's no way to know, just return the enclosing blockdevice size
             return self.device.size
@@ -82,7 +83,6 @@ class Decrypted(blockdevice.InnerLayer, blockdevice.Parametrizable):
 
 def create_encrypted(device, key_file=None, interactive=True):
     log.info("formatting new encrypted disk on {}".format(device))
-    assert os.path.exists(device)
     command = [CRYPTSETUP, 'luksFormat']
     if key_file:
         command.extend(['--key-file', key_file])
@@ -96,8 +96,6 @@ def open_encrypted(device, key_file=None):
     log.info("opening encrypted disk {}".format(device))
     name = luks_name(device)
     u_path = luks_path(name)
-    if os.path.exists(u_path):
-        raise Exception("target device path already exists")
     command = [CRYPTSETUP, 'luksOpen']
     if key_file:
         command.extend(['--key-file', key_file])
@@ -135,7 +133,7 @@ def luks_data_offset(bd_path):
     '''Given a path to a LUKS encrypted blockdevice, detects the offset of the
     encrypted data (in bytes) - that is, where the LUKS header "ends".
     Info extracted from the LUKS On-Disk Format Specification Version 1.2.2'''
-    data = open(bd_path).read(108)
+    data = misc.read_file(bd_path, 108)
     if data[0:6] != 'LUKS\xba\xbe':
         raise Exception("Not a LUKS device (no LUKS magic detected)")
     luks_version = struct.unpack('>H', data[6:8])[0]

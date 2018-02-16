@@ -2,6 +2,11 @@ import os
 from pybofh import shell
 import shutil
 
+def read_file(path, size=None):
+    f = open(path)
+    return f.read() if size is None else f.read(size)
+    
+
 def patch_file( path, replacements={} ):
     '''given a file, replaces all occurences of the keys in REPLACEMENTS in the file with their values'''
     assert os.path.isfile(path)

@@ -206,12 +206,13 @@ def generic_setup(test_instance):
 
     mocklist = [
         {"target": "os.path.isdir"},
-        {"target": "os.path.exists"},
         {"target": "pybofh.blockdevice.blockdevice_from_path", "side_effect": lambda path: SimpleBlockDevice(path)},
         {"target": "pybofh.shell.get", "side_effect": lambda: env.shell},
         ]
-    patches = [mock.patch(autospec=True, **a) for a in mocklist] + \
-        [mock.patch('pybofh.tests.common.get_fake_environment', new=lambda: env)]
+    patches = [mock.patch(autospec=True, **a) for a in mocklist] + [
+        mock.patch('pybofh.tests.common.get_fake_environment', new=lambda: env),
+        mock.patch('os.path.exists', new=env.path_exists),
+        ]
     for patch in patches:
         patch.start()
 
@@ -735,11 +736,12 @@ class ModuleTest(unittest.TestCase):
         self.assertEqual(node2.mountpoint, '/home')
 
     def test_devicemapper_info(self):
-        info = blockdevice.devicemapper_info('/dev/mapper/vg01-lv01')
-        self.assertEqual(info['Major, minor'], '253, 3')
-        self.assertEqual(info['Name'], 'vg01-lv01')
-        self.assertEqual(info['UUID'], 'LVM-0bIWK7rs4OtKBT3YAk9qJpnSa19Yj4pbAR5j79MUV5HFIst4JF0McYNuq9avYXBC')
-        self.assertEqual(info['Open count'], 1)
+        with mock.patch('os.path.exists', new=lambda path: True):
+            info = blockdevice.devicemapper_info('/dev/mapper/vg01-lv01')
+            self.assertEqual(info['Major, minor'], '253, 3')
+            self.assertEqual(info['Name'], 'vg01-lv01')
+            self.assertEqual(info['UUID'], 'LVM-0bIWK7rs4OtKBT3YAk9qJpnSa19Yj4pbAR5j79MUV5HFIst4JF0McYNuq9avYXBC')
+            self.assertEqual(info['Open count'], 1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -69,6 +69,16 @@ class FakeShell(Shell):
             command = tuple(command)
         self._fakes.append((command, response))
 
+    def remove_fake(self, command):
+        """Removes a fake command from the FakeShell.
+        The command argument must be the same object as passed to add_fake.
+        """
+        removed_fakes = [fake for fake in self._fakes if fake[0] == command]
+        if not removed_fakes:
+            raise KeyError("Fake not found: {}".format(command))
+        for fake in removed_fakes:
+            self._fakes.remove(fake)
+
     def add_fake_binary(self, binary_path, response):
         """Adds a fake "binary" to the FakeShell.
 

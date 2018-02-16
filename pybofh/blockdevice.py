@@ -11,6 +11,7 @@ import logging
 import re
 
 DM_DIR = '/dev/mapper/'
+INITIALIZING_SENTINEL = 'initializing'
 
 log = logging.getLogger(__name__)
 
@@ -319,6 +320,7 @@ class OuterLayer(Data):
     def __init__(self, blockdevice, **kwargs):
         Data.__init__(self, blockdevice)
         ilc = self._inner_layer_class
+        self._inner = INITIALIZING_SENTINEL
         self._inner = ilc(self, **kwargs)
         try:
             #this is repeated on InnerLayer._on_open, in case NotReady is raised
@@ -360,6 +362,8 @@ class InnerLayer(BaseBlockDevice, Openable):
     def __init__(self, outer_layer, **kwargs):
         BaseBlockDevice.__init__(self, None, skip_validation=True)
         Openable.__init__(self, **kwargs)
+        if outer_layer.inner is not INITIALIZING_SENTINEL:
+            raise Exception("InnerLayer instances should not be created directly - use OuterLayer.inner instead")
         self._outer = weakref.ref(outer_layer)  #avoid GC cyclic reference for __del__, see http://eli.thegreenplace.net/2009/06/12/safely-using-destructors-in-python/
 
     @property
