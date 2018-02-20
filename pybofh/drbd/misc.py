@@ -1,6 +1,7 @@
 import re
 import os
 from functools import partial
+import pybofh.misc
 
 DEVICE_DIR='/dev/'
 NAMED_DEVICE_PREFIX='drbd_'
@@ -10,7 +11,11 @@ RESOURCE_CONFIGFILE_EXT='.res'
 
 def devices_list(named=True, absolute_paths=True, include_prefix=True):
     '''list system block devices provided by drbd (typically /dev/drbdX).
-    Note this will not list any unavailable resources'''
+    The list is obtained through directory listing /dev, so the result will not contain any unavailable resources, and may contain resources for which there is no configuration.
+    If named is True (default), only returns named devices (e.g.: drbd_myname) - otherwise only
+    numbered devices are returned (e.g.: drbd0).
+    If include_prefix is False, the prefix (e.g.: "drbd" or "drbd_") is not included in the output.
+    '''
     assert NAMED_DEVICE_PREFIX.startswith(NUMBERED_DEVICE_PREFIX) #rewrite code carefully if this ever breaks
     assert not(absolute_paths and not include_prefix)
     def is_device(x):
@@ -23,7 +28,7 @@ def devices_list(named=True, absolute_paths=True, include_prefix=True):
         prefix= NAMED_DEVICE_PREFIX if named else NUMBERED_DEVICE_PREFIX
         assert x.startswith(prefix)
         return x[len(prefix):]
-    all_devices= filter( is_device, os.listdir(DEVICE_DIR))
+    all_devices= filter( is_device, pybofh.misc.list_dir(DEVICE_DIR))
     filter_naming= is_named if named else lambda x: not is_named(x)
     devices= filter(filter_naming, all_devices)
     if not include_prefix:
@@ -35,20 +40,20 @@ def devices_list(named=True, absolute_paths=True, include_prefix=True):
 
 def config_files():
     '''Returns the list of resource configuration files'''
-    names= filter(lambda x:x.endswith( RESOURCE_CONFIGFILE_EXT ), os.listdir(CONFIG_DIR))
+    names= filter(lambda x:x.endswith( RESOURCE_CONFIGFILE_EXT ), pybofh.misc.list_dir(CONFIG_DIR))
     paths= [os.path.join(CONFIG_DIR,name) for name in names]
     return paths
 
 def config_addresses(resource_file):
     '''returns the addresses in a resource config file'''
-    data = open(resource_file).read()
+    data = pybofh.misc.read_file(resource_file)
     addresses = re.findall('address +(.*?);', data)
     addresses = map(str.strip, addresses)
     return addresses
 
 def config_minor(resource_file):
     '''returns the minor number in a resource config file'''
-    data = open(resource_file).read()
+    data = pybofh.misc.read_file(resource_file)
     minors = re.findall('minor ([0-9]+)', data)
     assert len(minors) == 1
     return int(minors[0])
@@ -78,14 +83,14 @@ def resources_list():
         i2= cfgtxt.index(' ', i1)
         return cfgtxt[i1:i2]
     filenames= config_files()
-    cfgtxts= [open(fn).read() for fn in filenames]
+    cfgtxts= [pybofh.misc.read_file(fn) for fn in filenames]
     return map(get_resource_name, cfgtxts)
 
 def metadata_size(resource_size_bytes):
-    '''Calculates a approximated drbd resource metadata size
+    '''Calculates the approximated upper-bound of the drbd resource metadata size
     The result is in bytes
     Based on http://www.drbd.org/en/doc/users-guide-83/ch-internals
-    I believe this assumes 512 bytes sectors...'''
+    I believe this assumes 512 bytes sectors, but that might be internal to DRBD.'''
     mb = 2**20
     metadata_size_bytes = (int(resource_size_bytes / mb / 32768 ) + 1) * mb
     return metadata_size_bytes
