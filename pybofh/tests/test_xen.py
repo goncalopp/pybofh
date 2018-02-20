@@ -44,6 +44,9 @@ class DomuConfigTest(unittest.TestCase):
     def setUp(self):
         self.f = resource_stream('pybofh.tests', DOMUS_CFGS[0])
 
+    def tearDown(self):
+        mock.patch.stopall()
+
     def test_init(self):
         c = xen.DomuConfig(self.f)
         self.assertIsInstance(c, xen.DomuConfig)

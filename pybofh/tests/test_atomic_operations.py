@@ -34,6 +34,9 @@ class RevertibleOperationSequenceTest(unittest.TestCase):
     def setUp(self):
         setup_functions(self)
 
+    def tearDown(self):
+        mock.patch.stopall()
+
     def test_init(self):
         ros = RevertibleOperationSequence(lambda: None)
         self.assertIsInstance(ros, RevertibleOperationSequence)
@@ -117,6 +120,9 @@ class RevertibleOperationSequenceTest(unittest.TestCase):
 class AtomicContextTest(unittest.TestCase):
     def setUp(self):
         setup_functions(self)
+
+    def tearDown(self):
+        mock.patch.stopall()
 
     def test_context(self):
         with AtomicContext(self.reverse) as atomic:
