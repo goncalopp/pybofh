@@ -8,11 +8,9 @@
 
 import unittest
 import mock
-import functools
-from pybofh.shell import FakeShell
 from pybofh import blockdevice
 from pybofh.tests import common
-from pybofh.tests.common import FakeEnvironment, FakeDevice
+from pybofh.tests.common import FakeDevice
 
 LSBLK_DATA = """NAME                                MAJ:MIN RM  SIZE RO TYPE  MOUNTPOINT
 sda                                   8:0    0  2.7T  0 disk  
@@ -188,28 +186,27 @@ class SimpleInnerLayer(blockdevice.InnerLayer):
     def _size(self):
         return self.fakedevice.size
 
+class FakeEnvironment(common.FakeEnvironment):
+    def __init__(self):
+        common.FakeEnvironment.__init__(self)
+        self.shell.add_fake('/bin/lsblk', LSBLK_DATA)
+        self.shell.add_fake(('/sbin/dmsetup', 'info', '/dev/mapper/vg01-lv01'), DMSETUP_INFO_DATA)
+
 # Module level constants / vars / code  --------------------------------------
 
 blockdevice.register_data_class('SimpleData', SimpleData)
 blockdevice.register_data_class('SimpleOuterLayer', SimpleOuterLayer)
 
-def get_dev_from_path(env, path):
-    return SimpleBlockDevice(path)
-
 def generic_setup(test_instance):
     '''Setups mocks'''
-    # pylint: disable=unnecessary-lambda, star-args
     env = FakeEnvironment()
-    env.shell.add_fake('/bin/lsblk', LSBLK_DATA)
-    env.shell.add_fake(('/sbin/dmsetup', 'info', '/dev/mapper/vg01-lv01'), DMSETUP_INFO_DATA)
     test_instance.env = env
 
     mocklist = [
-        {"target": "os.path.isdir"},
-        {"target": "pybofh.blockdevice.blockdevice_from_path", "side_effect": lambda path: SimpleBlockDevice(path)},
         {"target": "pybofh.shell.get", "side_effect": lambda: env.shell},
         ]
     patches = [mock.patch(autospec=True, **a) for a in mocklist] + [
+        mock.patch('pybofh.blockdevice.blockdevice_from_path', new=SimpleBlockDevice),
         mock.patch('pybofh.tests.common.get_fake_environment', new=lambda: env),
         mock.patch('os.path.exists', new=env.path_exists),
         ]
@@ -743,5 +740,17 @@ class ModuleTest(unittest.TestCase):
             self.assertEqual(info['UUID'], 'LVM-0bIWK7rs4OtKBT3YAk9qJpnSa19Yj4pbAR5j79MUV5HFIst4JF0McYNuq9avYXBC')
             self.assertEqual(info['Open count'], 1)
 
-if __name__ == "__main__":
+    def test_get_blockdevice_child(self):
+        # uses LSBLK_DATA
+        with mock.patch('os.path.exists', new=lambda path: True):
+            child = blockdevice.get_blockdevice_child('dev/sda1')
+            self.assertEqual(child, '/dev/mapper/md0')
+            child = blockdevice.get_blockdevice_child('sda1')
+            self.assertEqual(child, '/dev/mapper/md0')
+            with self.assertRaises(Exception):
+                blockdevice.get_blockdevice_child('xxxsda1')
+            child = blockdevice.get_blockdevice_child('md0p2')
+            self.assertEqual(child, '/dev/mapper/vg02-something03')
+
+if __name__ == '__main__':
     unittest.main()
