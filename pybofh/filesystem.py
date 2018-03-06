@@ -7,20 +7,23 @@ class BaseFilesystem(blockdevice.Data):
     __metaclass__= ABCMeta
     def __init__(self, device):
         blockdevice.Data.__init__(self, device)
-    
+
     @abstractmethod
     def fsck(self):
         raise NotImplementedError
 
     @classmethod
     def create(cls, device, *args, **kwargs):
+        """Creates a filesystem in (i.e.: formats) the device with the given path.
+        Returns a instance of the filesystem class representing the new filesystem.
+        """
         path= device.path if isinstance(device, blockdevice.BaseBlockDevice) else device
         cls._create(path, *args, **kwargs)
+        return cls(path)
 
     @classmethod
     def _create(cls, path, *args, **kwargs):
         raise NotImplementedError
-
 
 class ExtX(BaseFilesystem):
     __metaclass__= ABCMeta
