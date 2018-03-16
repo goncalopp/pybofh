@@ -23,6 +23,11 @@ class Resource(object):
 
     @property
     def device(self):
-        path= "/dev/drbd_"+self._name
-        assert os.path.exists(path)
-        return path
+        return "/dev/drbd_" + self._name
+
+    @property
+    def name(self):
+        return self._name
+
+    def __repr__(self):
+        return """drbd.Resource("{}")""".format(self._name)

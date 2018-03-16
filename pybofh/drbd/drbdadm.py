@@ -40,23 +40,17 @@ def adjust(resource, options=()):
 
 def role(resource, options=()):
     out= shell.get().check_output((DRBDADM, "role") + options + (resource,))
-    assert len(out)==1
-    out=out[0]
-    roles= out.split("/")
+    roles = out.strip().split("/")
     assert len(roles)==2
     return roles
 
 def cstate(resource, options=()):
     out= shell.get().check_output((DRBDADM, "cstate") + options + (resource,))
-    assert len(out)==1
-    out=out[0]
-    return out
+    return out.strip()
 
 def dstate(resource, options=()):
     out= shell.get().check_output((DRBDADM, "dstate") + options + (resource,))
-    assert len(out)==1
-    out=out[0]
-    states= out.split("/")
+    states= out.strip().split("/")
     assert len(states)==2
     return states
 
