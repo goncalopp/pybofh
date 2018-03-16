@@ -500,9 +500,7 @@ class BlockDeviceStack(Resizeable, Openable):
                 layer.data.resize(byte_size=target_size, **common_args)
                 assert layer.data.inner.size > inner_size #make sure the OuterLayer resized the InnerLayer
                 assert layer.data.inner.size == layer.data.size - layer.data.overhead
-                log.debug("blabla over {}, gran {}, target {}".format(layer.data.overhead, granularity, target_size))
                 target_size = layer.data.inner.size
-                log.debug(target_size)
             #finally, resize the data of the innermost layer (which is not an OuterLayer)
             self.innermost.data.resize(byte_size=self.innermost.size, **common_args)
         else: #reduction
