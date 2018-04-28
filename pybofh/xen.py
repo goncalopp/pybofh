@@ -8,13 +8,14 @@ import shlex
 
 import pybofh
 from pybofh import shell
+from pybofh import settingsmodule
 
 log = logging.getLogger(__name__)
 
 DEFAULT_CFG_DIRS = ["/etc/xen/"]
 CFG_EXT = ".cfg"
 
-settings = pybofh.settings.for_("xen")
+settings = settingsmodule.get_settings(__name__)
 settings.define("domu_config_dirs", "Directories that contain xen DomU configs")
 
 class DomuDisk(object):

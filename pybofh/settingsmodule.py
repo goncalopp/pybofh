@@ -235,3 +235,12 @@ class SettingsMutation(object):
     def __exit__(self, exc_type, exc_value, tb):
         # pylint: disable=protected-access
         self.settings._set_values(self.old_values)
+
+_global_settings = Settings()
+
+def get_settings(module_name=None):
+    """Returns the (global) settings object.
+    If a module_name is provided, returns a new Settings object, pointing to
+    the global settings, but with the module_name set as a prefix.
+    """
+    return _global_settings.for_(module_name) if module_name else _global_settings

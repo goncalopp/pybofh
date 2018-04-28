@@ -6,7 +6,6 @@ import mock
 from pkg_resources import resource_stream
 from pybofh.tests import common
 from pybofh import xen
-from pybofh import settings
 
 DOMUS_CFGS = ["domu1.cfg"]
 XL_LIST_DATA = """Name                                        ID   Mem VCPUs    State   Time(s)
@@ -123,10 +122,10 @@ class ModuleTest(unittest.TestCase):
 
     def test_all_domus_configs_filepaths(self):
         with mock.patch('os.listdir', return_value=['domu.cfg', 'unrelated.txt']):
-            with settings.for_('xen').change(domu_config_dirs=[]):
+            with xen.settings.change(domu_config_dirs=[]):
                 l = xen._all_domus_configs_filepaths()
                 self.assertEqual(l, [])
-            with settings.for_('xen').change(domu_config_dirs=['/a', '/b']):
+            with xen.settings.change(domu_config_dirs=['/a', '/b']):
                 l = xen._all_domus_configs_filepaths()
                 self.assertEqual(l, ['/a/domu.cfg', '/b/domu.cfg'])
 
