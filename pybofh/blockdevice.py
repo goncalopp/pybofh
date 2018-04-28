@@ -432,10 +432,11 @@ class BlockDeviceStack(Resizeable, Openable):
     def _sanity_check(self):
         for layer in self.layers[:-1]:
             layer.data._sanity_check()
-        assert self.innermost.size == self.innermost.data.size
-        
+        if self.innermost.data is not None:
+            assert self.innermost.size == self.innermost.data.size
+
     @property
-    def layers(self):  # could be a path
+    def layers(self):
         '''Returns the layers of this stack. This is simply a iterable of 
         BaseBlockDevice, ordered from outermost to innermost'''
         if self._layers is None:
