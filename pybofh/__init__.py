@@ -5,4 +5,5 @@ from . import btrfs
 from . import xen
 from . import lvm
 from . import drbd
+from . import interfaces
 from .atomic_operations import AtomicContext
